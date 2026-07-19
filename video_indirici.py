@@ -110,7 +110,7 @@ class ToolManager:
         self.app_dir = app_dir
 
     def path_for(self, name: str) -> Path:
-        return self.app_dir / TOOL_FILENAMES[name]
+        return self.app_dir / "bin" / TOOL_FILENAMES[name]
 
     def check(self, include_versions: bool = False) -> Dict[str, ToolStatus]:
         statuses: Dict[str, ToolStatus] = {}
@@ -179,36 +179,16 @@ def build_download_command(
     output_dir: Path,
     use_firefox_cookies: bool,
 ) -> List[str]:
-    selected_quality = normalize_quality(quality)
-    output_template = output_dir / "%(playlist_title|Tekli Video)s" / "%(playlist_index|000)s - %(title)s.%(ext)s"
-    archive_file = output_dir / "indirilenler.txt"
-
     command = [
-        str(tool_manager.path_for("yt-dlp")),
-        "--newline",
-        "--no-color",
-        "--windows-filenames",
-        "--trim-filenames",
-        "180",
-        "--ffmpeg-location",
-        str(tool_manager.app_dir),
-        "--js-runtimes",
-        "deno",
-        "--yes-playlist",
-        "--ignore-errors",
-        "--download-archive",
-        str(archive_file),
-        "-f",
-        QUALITY_FORMATS[selected_quality],
-        "--merge-output-format",
-        "mp4",
-        "-o",
-        str(output_template),
+        str(tool_manager.path_for("deno")),
+        "run",
+        "--allow-read",
+        "--allow-write",
+        "--allow-run",
+        str(tool_manager.app_dir / "yt.ts"),
+        "video",
         url,
     ]
-
-    if use_firefox_cookies:
-        command[1:1] = ["--cookies-from-browser", "firefox"]
 
     return command
 
@@ -293,7 +273,7 @@ class DownloadWorker(threading.Thread):
         try:
             self.process = subprocess.Popen(
                 command,
-                cwd=str(self.output_dir),
+                cwd=str(self.tool_manager.app_dir),
                 env=build_tool_env(self.tool_manager.app_dir),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,

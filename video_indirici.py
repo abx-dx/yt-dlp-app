@@ -25,6 +25,12 @@ from typing import Any, Dict, Iterable, List, Optional
 APP_NAME = "Video İndirici"
 APP_VERSION = "1.0"
 
+PROFILE_OPTIONS = {
+    "Video": "video",
+    "Ses": "audio",
+    "Playlist": "playlist",
+}
+
 TOOL_FILENAMES = {
     "yt-dlp": "yt-dlp.exe",
     "ffmpeg": "ffmpeg.exe",
@@ -175,7 +181,7 @@ def build_download_command(
     *,
     tool_manager: ToolManager,
     url: str,
-    quality: str,
+    profile: str,
     output_dir: Path,
     use_firefox_cookies: bool,
 ) -> List[str]:
@@ -186,9 +192,9 @@ def build_download_command(
         "--allow-write",
         "--allow-run",
         str(tool_manager.app_dir / "yt.ts"),
-        "video",
+        profile,
         url,
-    ]
+]
 
     return command
 
@@ -205,7 +211,7 @@ class DownloadWorker(threading.Thread):
         *,
         tool_manager: ToolManager,
         url: str,
-        quality: str,
+        profile: str,
         output_dir: Path,
         use_firefox_cookies: bool,
         event_queue: "queue.Queue[tuple[str, Any]]",
@@ -213,7 +219,7 @@ class DownloadWorker(threading.Thread):
         super().__init__(daemon=True)
         self.tool_manager = tool_manager
         self.url = url
-        self.quality = quality
+        self.profile = profile
         self.output_dir = output_dir
         self.use_firefox_cookies = use_firefox_cookies
         self.event_queue = event_queue
@@ -259,7 +265,7 @@ class DownloadWorker(threading.Thread):
         command = build_download_command(
             tool_manager=self.tool_manager,
             url=self.url,
-            quality=self.quality,
+            profile=self.profile,
             output_dir=self.output_dir,
             use_firefox_cookies=self.use_firefox_cookies,
         )
@@ -369,23 +375,36 @@ class VideoDownloaderApp:
         options_frame.pack(fill=tk.X, pady=8)
         options_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(options_frame, text="Kalite:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=8)
-        quality_container = ttk.Frame(options_frame)
-        quality_container.grid(row=0, column=1, sticky=tk.W, padx=10, pady=8)
-        for label, value in (("480p", "480"), ("720p", "720"), ("1080p", "1080"), ("4K", "4K")):
-            ttk.Radiobutton(
-                quality_container,
-                text=label,
-                value=value,
-                variable=self.quality_var,
-            ).pack(side=tk.LEFT, padx=(0, 14))
+        ttk.Label(options_frame, text="Profil:").grid(
+            row=0, column=0, sticky=tk.W, padx=10, pady=8
+        )
 
-        ttk.Label(options_frame, text="Klasör:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=8)
+        self.profile_var = tk.StringVar(value="Video")
+
+        profile_combo = ttk.Combobox(
+            options_frame,
+            textvariable=self.profile_var,
+            values=list(PROFILE_OPTIONS.keys()),
+            state="readonly",
+            width=15,
+        )
+
+        profile_combo.grid(row=0, column=1, sticky=tk.W, padx=10, pady=8)
+
+        ttk.Label(options_frame, text="Klasör:").grid(
+            row=1, column=0, sticky=tk.W, padx=10, pady=8
+        )
         folder_row = ttk.Frame(options_frame)
         folder_row.grid(row=1, column=1, sticky=tk.EW, padx=10, pady=8)
         folder_row.columnconfigure(0, weight=1)
-        ttk.Entry(folder_row, textvariable=self.output_dir_var).grid(row=0, column=0, sticky=tk.EW)
-        ttk.Button(folder_row, text="Seç", command=self.choose_output_dir).grid(row=0, column=1, padx=(8, 0))
+        ttk.Entry(folder_row, textvariable=self.output_dir_var).grid(
+            row=0, column=0, sticky=tk.EW
+        )
+        ttk.Button(
+            folder_row,
+            text="Seç",
+            command=self.choose_output_dir,
+        ).grid(row=0, column=1, padx=(8, 0))
 
         ttk.Checkbutton(
             options_frame,
@@ -545,7 +564,7 @@ class VideoDownloaderApp:
         self.worker = DownloadWorker(
             tool_manager=self.tool_manager,
             url=url,
-            quality=self.quality_var.get(),
+            profile=PROFILE_OPTIONS[self.profile_var.get()],
             output_dir=output_dir,
             use_firefox_cookies=self.use_firefox_cookies_var.get(),
             event_queue=self.event_queue,

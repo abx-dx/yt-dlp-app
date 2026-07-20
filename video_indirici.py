@@ -37,13 +37,6 @@ TOOL_FILENAMES = {
     "deno": "deno.exe",
 }
 
-QUALITY_FORMATS = {
-    "480": "bv*[vcodec^=avc1][height<=480]+ba[ext=m4a]/bv*[height<=480]+ba/b[height<=480]/best[height<=480]",
-    "720": "bv*[vcodec^=avc1][height<=720]+ba[ext=m4a]/bv*[height<=720]+ba/b[height<=720]/best[height<=720]",
-    "1080": "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/bv*[height<=1080]+ba/b[height<=1080]/best[height<=1080]",
-    "4K": "bv*[height<=2160]+ba/b[height<=2160]/best[height<=2160]",
-}
-
 DOWNLOAD_PERCENT_RE = re.compile(r"^\[download\]\s+(\d+(?:\.\d+)?)%")
 PLAYLIST_COUNTER_RE = re.compile(r"^\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
 
@@ -67,19 +60,6 @@ def build_tool_env(tool_dir: Path) -> Dict[str, str]:
     current_path = env.get("PATH", "")
     env["PATH"] = str(tool_dir) + os.pathsep + current_path
     return env
-
-
-def normalize_quality(quality: str) -> str:
-    if quality in QUALITY_FORMATS:
-        return quality
-    return "480"
-
-
-def display_quality(quality: str) -> str:
-    selected = normalize_quality(quality)
-    if selected == "4K":
-        return "4K"
-    return f"{selected}p"
 
 
 def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
@@ -194,9 +174,15 @@ def build_download_command(
         str(tool_manager.app_dir / "yt.ts"),
         profile,
         url,
-]
+        "--output",
+        str(output_dir),
+    ]
+
+    if use_firefox_cookies:
+        command.append("--cookies")
 
     return command
+
 
 
 def iter_missing_tools(statuses: Dict[str, ToolStatus]) -> Iterable[ToolStatus]:
@@ -228,10 +214,22 @@ class DownloadWorker(threading.Thread):
 
     def cancel(self) -> None:
         self.cancel_requested.set()
+
         process = self.process
         if process and process.poll() is None:
             try:
-                process.terminate()
+                subprocess.run(
+                    [
+                        "taskkill",
+                        "/PID",
+                        str(process.pid),
+                        "/T",
+                        "/F",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
             except OSError:
                 pass
 
@@ -271,7 +269,6 @@ class DownloadWorker(threading.Thread):
         )
 
         self.emit("log", f"İndirme klasörü: {self.output_dir}")
-        self.emit("log", f"Seçilen kalite: {display_quality(self.quality)}")
         if self.use_firefox_cookies:
             self.emit("log", "Firefox çerezleri kullanılacak. Uygulama çerez kaydetmez.")
         self.emit("log", "yt-dlp başlatılıyor...")
@@ -336,7 +333,6 @@ class VideoDownloaderApp:
         self.current_playlist_counter = ""
 
         self.url_var = tk.StringVar()
-        self.quality_var = tk.StringVar(value="480")
         self.output_dir_var = tk.StringVar(value=str(get_default_download_dir()))
         self.use_firefox_cookies_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Hazır.")
@@ -677,26 +673,7 @@ def run_self_test() -> int:
         "--download-archive",
         "--merge-output-format",
     ]
-    for quality in QUALITY_FORMATS:
-        command = build_download_command(
-            tool_manager=tool_manager,
-            url="https://example.com/video",
-            quality=quality,
-            output_dir=sample_output,
-            use_firefox_cookies=False,
-        )
-        for flag in required_flags:
-            if flag not in command:
-                print(f"FAIL: {quality} komutunda {flag} yok")
-                ok = False
 
-        if QUALITY_FORMATS[quality] not in command:
-            print(f"FAIL: {quality} format seçimi komuta eklenmedi")
-            ok = False
-
-        if str(tool_manager.path_for("yt-dlp")) != command[0]:
-            print("FAIL: yt-dlp yolu komutun ilk argümanı değil")
-            ok = False
 
     progress_sample = parse_progress_line("[download]  14.5% of 145.80MiB at 2.20MiB/s ETA 00:56")
     if not progress_sample or progress_sample.get("kind") != "percent":

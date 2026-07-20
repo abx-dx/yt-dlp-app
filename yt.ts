@@ -1,9 +1,4 @@
-const configFile = new URL("./config.json", import.meta.url);
-
-const config = JSON.parse(
-  await Deno.readTextFile(configFile)
-);
-
+import settings from "./settings.ts";
 
 function sanitizeFilename(name: string): string {
 
@@ -31,17 +26,30 @@ function formatKbps(
 }
 
 
-const [command, originalUrl] = Deno.args;
+const args = [...Deno.args];
 
+const command = args.shift();
+const originalUrl = args.shift();
+
+let outputDir: string | undefined;
+let useCookies = false;
+
+while (args.length > 0) {
+  const arg = args.shift();
+
+  switch (arg) {
+    case "--output":
+      outputDir = args.shift();
+      break;
+
+    case "--cookies":
+      useCookies = true;
+      break;
+  }
+}
 
 if (!command || !originalUrl) {
-
-  console.log(
-    "Kullanım:\nyt video URL\nyt audio URL\nyt playlist URL\nyt info URL"
-  );
-
   Deno.exit(1);
-
 }
 
 
@@ -57,26 +65,36 @@ if (url.startsWith("https://music.youtube.com/playlist")) {
 
 }
 
+const profileSettings = settings.profiles[command];
 
-const profileConfig =
-  config.profiles[command];
+if (!profileSettings) {
+  console.error(`Geçersiz profil: ${command}`);
+  Deno.exit(1);
+}
 
+const cookies = structuredClone(settings.cookies);
+cookies.enabled = useCookies;
 
-let output =
-  profileConfig?.output ||
-  config.output;
+let output = profileSettings.output;
 
+if (outputDir) {
+  const normalized = outputDir.replaceAll("\\", "/");
+
+  output = output.replace(
+    "./downloads",
+    normalized,
+  );
+}
 
 const ytdlpArgs: string[] = [];
 
 
-if (config.cookies?.enabled) {
 
+if (cookies.enabled) {
   ytdlpArgs.push(
     "--cookies-from-browser",
-    config.cookies.browser
+    cookies.browser
   );
-
 }
 
 
@@ -108,11 +126,11 @@ if (command === "playlist") {
     const infoArgs: string[] = [];
 
 
-    if (config.cookies?.enabled) {
+    if (cookies.enabled) {
 
       infoArgs.push(
         "--cookies-from-browser",
-        config.cookies.browser
+        cookies.browser
       );
 
     }
@@ -127,7 +145,7 @@ if (command === "playlist") {
 
     const infoCmd =
       new Deno.Command(
-        config.ytdlp,
+        settings.ytdlp,
         {
           args: infoArgs,
           stdout: "piped",
@@ -143,10 +161,9 @@ if (command === "playlist") {
     const infoText =
       new TextDecoder("utf-8")
       .decode(infoResult.stdout);
-
-
-    const info =
-      JSON.parse(infoText);
+	  
+	const info =
+	  JSON.parse(infoText); 
 
 
     const count =
@@ -165,14 +182,21 @@ if (command === "playlist") {
       );
 
 
-    output =
-      `./downloads/${folder}/%(playlist_index)0${padding}d - %(artist,uploader)s - %(title)s.%(ext)s`;
+	const baseDir = outputDir
+	  ? outputDir.replaceAll("\\", "/")
+	  : "./downloads";
 
+	output =
+      `${baseDir}/${folder}/%(playlist_index)0${padding}d - %(title)s.%(ext)s`;
 
   } catch {
 
-    output =
-      "./downloads/%(playlist_index)s - %(artist,uploader)s - %(title)s.%(ext)s";
+	const baseDir = outputDir
+      ? outputDir.replaceAll("\\", "/")
+      : "./downloads";
+
+	output =
+	   `${baseDir}/%(playlist_index)s - %(title)s.%(ext)s`;
 
   }
 
@@ -189,16 +213,16 @@ ytdlpArgs.push(
 
 // aria2
 
-if (config.aria2) {
+if (settings.aria2) {
 
   try {
 
-    await Deno.stat(config.aria2);
+    await Deno.stat(settings.aria2);
 
 
     ytdlpArgs.push(
       "--downloader",
-      config.aria2,
+      settings.aria2,
       "--downloader-args",
       "aria2c:-x 16 -s 16 -j 16 -k 1M"
     );
@@ -224,7 +248,7 @@ else {
 
 
   const profile =
-    config.profiles[command];
+    settings.profiles[command];
 
 
   if (!profile) {
@@ -273,9 +297,10 @@ else {
 
 // çalıştır
 
+let child: Deno.ChildProcess | undefined;
 const process =
   new Deno.Command(
-    config.ytdlp,
+    settings.ytdlp,
     {
       args: ytdlpArgs,
       stdout: "piped",
@@ -284,7 +309,7 @@ const process =
   );
 
 
-const child =
+child =
   process.spawn();
 
 
@@ -325,24 +350,19 @@ if (child.stdout) {
 
       if (p.length >= 9) {
 
-
         const filePath =
           p.slice(8).join("|");
-
 
         const fileName =
           filePath.split("\\").pop();
 
-
         let sizeMB =
           "0.00";
-
 
         try {
 
           const stat =
             await Deno.stat(filePath);
-
 
           sizeMB =
             (
@@ -351,9 +371,7 @@ if (child.stdout) {
               1024
             ).toFixed(2);
 
-
         } catch {}
-
 
         console.log("");
 
@@ -361,36 +379,28 @@ if (child.stdout) {
           `[OK] ${fileName}`
         );
 
-
         if (command === "video") {
-
 
           const formats =
             p[2].split("+");
 
-
           const videoFormat =
             formats[0] || "";
 
-
           const audioFormat =
             formats[1] || "";
-
 
           console.log(
             `  ${p[1]} | ${p[5]} | ${videoFormat} ${p[3]} ${formatKbps(p[6])} kbps | ${audioFormat} ${p[4]} ${formatKbps(p[7])} kbps | ${sizeMB} MB`
           );
 
-
         }
 
         else {
 
-
           console.log(
             `  ${p[1]} | ${p[2]} | ${p[4]} | ${formatKbps(p[7])} kbps | ${sizeMB} MB`
-          );
-
+           );
 
         }
 
@@ -403,9 +413,9 @@ if (child.stdout) {
 }
 
 
+  	
 const status =
   await child.status;
-
 
 if (!status.success) {
 
@@ -413,4 +423,4 @@ if (!status.success) {
     status.code
   );
 
-}
+}	

@@ -33,7 +33,7 @@ yt-dlp.exe
 ffmpeg.exe
 deno.exe
 _internal
-README.txt
+README.md
 DISCLAIMER.txt
 THIRD_PARTY_NOTICES.txt
 ```
@@ -76,7 +76,7 @@ PyInstaller ile portable onedir build:
 python -m PyInstaller --noconfirm --clean --onedir --windowed --name "Video Indirici" video_indirici.py
 ```
 
-Son kullanıcı paketi hazırlanırken `dist\Video Indirici` klasörüne `yt-dlp.exe`, `ffmpeg.exe`, `deno.exe`, `README.txt`, `DISCLAIMER.txt` ve `THIRD_PARTY_NOTICES.txt` eklenir.
+Son kullanıcı paketi hazırlanırken `dist\Video Indirici` klasörüne yt-dlp.exe, ffmpeg.exe, deno.exe ile gerekli lisans ve dokümantasyon dosyaları eklenir.
 
 ## Sorumlu Kullanım
 

@@ -13,7 +13,6 @@ export interface ProfileConfig {
 export interface Config {
   ytdlp: string;
   ffmpeg: string;
-  aria2: string;
   cookies: CookiesConfig;
   profiles: Record<string, ProfileConfig>;
 }
@@ -22,8 +21,6 @@ const config: Config = {
   ytdlp: "./bin/yt-dlp.exe",
 
   ffmpeg: "./bin/ffmpeg.exe",
-
-  aria2: "./bin/aria2c.exe",
 
   cookies: {
     enabled: true,

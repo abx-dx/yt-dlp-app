@@ -104,6 +104,7 @@ ytdlpArgs.push(
   "--windows-filenames",
   "--newline",
   "--progress",
+  "--no-quiet",
   "--retries",
   "infinite",
   "--fragment-retries",
@@ -113,7 +114,9 @@ ytdlpArgs.push(
   "jpg",
   "--embed-metadata",
   "--encoding",
-  "utf-8"
+  "utf-8",
+  "--concurrent-fragments", // <-- EKLENDİ: 16 parçayı eşzamanlı indirir
+  "16"
 );
 
 
@@ -210,29 +213,6 @@ ytdlpArgs.push(
   "after_move:FILE_DONE|%(id)s|%(format_id)s|%(vcodec)s|%(acodec)s|%(resolution)s|%(vbr)s|%(abr)s|%(filepath)s"
 );
 
-
-// aria2
-
-if (settings.aria2) {
-
-  try {
-
-    await Deno.stat(settings.aria2);
-
-
-    ytdlpArgs.push(
-      "--downloader",
-      settings.aria2,
-      "--downloader-args",
-      "aria2c:-x 16 -s 16 -j 16 -k 1M"
-    );
-
-
-  } catch {}
-
-}
-
-
 // info
 
 if (command === "info") {
@@ -296,131 +276,78 @@ else {
 
 
 // çalıştır
+const process = new Deno.Command(settings.ytdlp, {
+  args: ytdlpArgs,
+  stdout: "piped",
+  stderr: "piped", // stderr de dinlemeye alındı
+});
 
-let child: Deno.ChildProcess | undefined;
-const process =
-  new Deno.Command(
-    settings.ytdlp,
-    {
-      args: ytdlpArgs,
-      stdout: "piped",
-      stderr: "inherit"
-    }
-  );
+const child = process.spawn();
 
+// Hem stdout hem stderr akışını eşzamanlı canlı okuyan fonksiyon
+// Hem stdout hem stderr akışını eşzamanlı VE TAMPONSUZ (FLUSH) okuyan fonksiyon
+async function streamOutput(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder("utf-8");
+  const encoder = new TextEncoder();
+  let buffer = "";
 
-child =
-  process.spawn();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
 
-
-const decoder =
-  new TextDecoder("utf-8");
-
-
-let buffer = "";
-
-
-if (child.stdout) {
-
-  for await (const chunk of child.stdout) {
-
-
-    buffer += decoder.decode(chunk);
-
-
-    const lines =
-      buffer.split("\n");
-
-
-    buffer =
-      lines.pop() || "";
-
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
 
     for (const line of lines) {
+      const cleanLine = line.trim();
+      if (!cleanLine) continue;
 
+      if (cleanLine.startsWith("FILE_DONE|")) {
+        const p = cleanLine.split("|");
+        if (p.length >= 9) {
+          const filePath = p.slice(8).join("|");
+          const fileName = filePath.split("\\").pop() || filePath.split("/").pop();
+          let sizeMB = "0.00";
 
-      if (!line.startsWith("FILE_DONE|")) {
-        continue;
-      }
+          try {
+            const stat = await Deno.stat(filePath);
+            sizeMB = (stat.size / 1024 / 1024).toFixed(2);
+          } catch {}
 
+          const msg1 = "\n";
+          const msg2 = `[OK] ${fileName}\n`;
+          let msg3 = "";
 
-      const p =
-        line.split("|");
+          if (command === "video") {
+            const formats = p[2].split("+");
+            const videoFormat = formats[0] || "";
+            const audioFormat = formats[1] || "";
+            msg3 = `  ${p[1]} | ${p[5]} | ${videoFormat} ${p[3]} ${formatKbps(p[6])} kbps | ${audioFormat} ${p[4]} ${formatKbps(p[7])} kbps | ${sizeMB} MB\n`;
+          } else {
+            msg3 = `  ${p[1]} | ${p[2]} | ${p[4]} | ${formatKbps(p[7])} kbps | ${sizeMB} MB\n`;
+          }
 
-
-      if (p.length >= 9) {
-
-        const filePath =
-          p.slice(8).join("|");
-
-        const fileName =
-          filePath.split("\\").pop();
-
-        let sizeMB =
-          "0.00";
-
-        try {
-
-          const stat =
-            await Deno.stat(filePath);
-
-          sizeMB =
-            (
-              stat.size /
-              1024 /
-              1024
-            ).toFixed(2);
-
-        } catch {}
-
-        console.log("");
-
-        console.log(
-          `[OK] ${fileName}`
-        );
-
-        if (command === "video") {
-
-          const formats =
-            p[2].split("+");
-
-          const videoFormat =
-            formats[0] || "";
-
-          const audioFormat =
-            formats[1] || "";
-
-          console.log(
-            `  ${p[1]} | ${p[5]} | ${videoFormat} ${p[3]} ${formatKbps(p[6])} kbps | ${audioFormat} ${p[4]} ${formatKbps(p[7])} kbps | ${sizeMB} MB`
-          );
-
+          // Çıktıları tamponlamadan anında Python'a basar:
+          Deno.stdout.writeSync(encoder.encode(msg1 + msg2 + msg3));
         }
-
-        else {
-
-          console.log(
-            `  ${p[1]} | ${p[2]} | ${p[4]} | ${formatKbps(p[7])} kbps | ${sizeMB} MB`
-           );
-
-        }
-
+      } else {
+        // CANLI FLUSH: console.log yerine doğrudan stdout'a anında yazdırıyoruz
+        Deno.stdout.writeSync(encoder.encode(cleanLine + "\n"));
       }
-
     }
-
   }
-
 }
 
+// İki akışı paralel başlat
+await Promise.all([
+  streamOutput(child.stdout),
+  streamOutput(child.stderr)
+]);
 
-  	
-const status =
-  await child.status;
+const status = await child.status;
 
 if (!status.success) {
-
-  Deno.exit(
-    status.code
-  );
-
-}	
+  Deno.exit(status.code);
+}

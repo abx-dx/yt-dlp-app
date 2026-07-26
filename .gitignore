@@ -1,14 +1,41 @@
-__pycache__/
-*.pyc
+# ==========================================
+# Proje İçi İndirilen Harici Araçlar ve Artıkları
+# (update-bin.sh GitHub Actions tarafında indirecek)
+# ==========================================
+bin/*.exe
+bin/*.zip
+bin/*.sha256
+bin/*.txt
+bin/.ffmpeg_version
+
+# ==========================================
+# İndirilen Medya / Test Çıktıları
+# ==========================================
+indirilenler/
+
+# ==========================================
+# PyInstaller & Paketleme Artıkları
+# ==========================================
 build/
 dist/
-release/
-indirilenler/
-self-test-output/
-*.log
-*.zip
-*.exe
-downloads/
-*.part
-calistir.bat
-bin/
+portable-app/
+*.spec
+_runner_entry.py
+
+# ==========================================
+# Python, Önbellek ve C-Extension Modülleri
+# ==========================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ==========================================
+# IDE, Editör ve Geçici/Yedek Dosyalar
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.bak
+*~
+*.sh_

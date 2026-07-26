@@ -1,0 +1,40 @@
+name: Build Portable Downloader
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Kodları Kopyala (Checkout)
+        uses: actions/checkout@v4
+        with:
+          ref: deno-integration
+
+      - name: Python Kurulumu
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: PyInstaller Kurulumu
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: İkili Dosyaları (Bin) Güncelle/İndir
+        run: |
+          bash update-bin.sh
+        shell: bash
+
+      - name: Derleme Betiğini Çalıştır
+        run: |
+          bash build-portable.sh
+        shell: bash
+
+      - name: Çıktıyı Kaydet
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-app-artifact
+          path: portable-app

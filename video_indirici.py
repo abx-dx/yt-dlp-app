@@ -1,8 +1,25 @@
 # -*- coding: utf-8 -*-
-"""Basit Türkçe yt-dlp arayüzü.
-@thefinega
-Portable kullanım hedeflenir: bu dosyadan üretilen exe ile aynı klasörde
-yt-dlp.exe, ffmpeg.exe ve deno.exe bulunmalıdır.
+"""
+Basit Türkçe yt-dlp arayüzü.
+
+Bu uygulama taşınabilir (portable) kullanım amacıyla geliştirilmiştir.
+Derlenen MediaDownloader.exe ile aynı dizinde aşağıdaki yapı bulunmalıdır.
+
+Gerekli araçlar (bin):
+    - bin/yt-dlp.exe
+    - bin/ffmpeg.exe
+    - bin/ffprobe.exe
+    - bin/deno.exe
+
+Ek betikler:
+    - Proje kök dizinindeki tüm *.ts dosyaları.
+
+Not:
+Bu açıklama aynı zamanda build-portable.sh betiği tarafından bağımlılık
+tespiti amacıyla kullanılmaktadır. Yukarıdaki araç listesinde yapılacak
+değişiklikler derleme paketine doğrudan yansır.
+
+@thefinega projesinden forklanmıştır.
 """
 
 from __future__ import annotations
@@ -16,6 +33,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -34,6 +52,7 @@ PROFILE_OPTIONS = {
 TOOL_FILENAMES = {
     "yt-dlp": "yt-dlp.exe",
     "ffmpeg": "ffmpeg.exe",
+    "ffprobe": "ffprobe.exe",
     "deno": "deno.exe",
 }
 
@@ -100,28 +119,34 @@ class ToolManager:
 
     def check(self, include_versions: bool = False) -> Dict[str, ToolStatus]:
         statuses: Dict[str, ToolStatus] = {}
-        for name in TOOL_FILENAMES:
+
+        def _check_single(name: str) -> tuple[str, ToolStatus]:
             path = self.path_for(name)
             if not path.exists():
-                statuses[name] = ToolStatus(
+                return name, ToolStatus(
                     name=name,
                     path=path,
                     exists=False,
                     error=f"{path.name} uygulama klasöründe bulunamadı.",
                 )
-                continue
 
             if include_versions:
                 version, error = self._read_version(name, path)
-                statuses[name] = ToolStatus(
+                return name, ToolStatus(
                     name=name,
                     path=path,
                     exists=True,
                     version=version,
                     error=error,
                 )
-            else:
-                statuses[name] = ToolStatus(name=name, path=path, exists=True)
+            return name, ToolStatus(name=name, path=path, exists=True)
+
+        # Araçları aynı anda arka planda (paralel) sorgulayalım
+        with ThreadPoolExecutor(max_workers=len(TOOL_FILENAMES)) as executor:
+            results = executor.map(_check_single, TOOL_FILENAMES.keys())
+            for name, status in results:
+                statuses[name] = status
+
         return statuses
 
     def all_required_available(self) -> bool:
@@ -131,6 +156,7 @@ class ToolManager:
         args = {
             "yt-dlp": [str(path), "--version"],
             "ffmpeg": [str(path), "-version"],
+            "ffprobe": [str(path), "-version"],
             "deno": [str(path), "--version"],
         }[name]
 
@@ -229,6 +255,7 @@ class DownloadWorker(threading.Thread):
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     check=False,
+                    creationflags=get_creation_flags(),
                 )
             except OSError:
                 pass
@@ -322,7 +349,7 @@ class DownloadWorker(threading.Thread):
 class VideoDownloaderApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title(f"{APP_NAME} {APP_VERSION} | @thefinega")
+        self.root.title(f"{APP_NAME} {APP_VERSION}")
         self.root.geometry("840x660")
         self.root.minsize(760, 600)
 
@@ -449,7 +476,7 @@ class VideoDownloaderApp:
         ttk.Button(tools_frame, text="Tekrar Kontrol Et", command=self.refresh_tools).grid(
             row=0,
             column=2,
-            rowspan=3,
+            rowspan=4,
             sticky=tk.NS,
             padx=10,
             pady=8,

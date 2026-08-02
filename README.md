@@ -1,83 +1,117 @@
-# Video İndirici
+# Video İndirici (MediaDownloader)
 
-Basit, portable Windows arayüzü ile `yt-dlp` üzerinden video veya playlist indirmek için hazırlanmıştır.
+Video İndirici (MediaDownloader), Windows odaklı taşınabilir bir arayüz sunan bir uygulamadır. Python + Tkinter ile geliştirilen GUI, indirme operasyonlarını Deno yardımcı betiği (`yt.ts`) aracılığıyla yürütür: Python arayüzü kullanıcı etkileşimini yönetir; Deno betiği ise `yt-dlp` çağrılarını oluşturur, çıktıyı işler ve anlık (unbuffered) çıktı akışı sağlar.
 
-## Özellikler
+Bu README, depoda yapılan son değişiklikler (portable build, çapraz platform ikili desteği, `update-bin` ve `build-portable` betikleri, Deno entegrasyonu vb.) göz önünde bulundurularak hazırlanmıştır.
 
-- Türkçe Tkinter arayüzü
-- Tek video veya playlist linki
-- 480p / 720p / 1080p / 4K kalite seçimi
-- İndirme klasörü seçimi
-- Varsayılan indirme klasörü: uygulama klasöründeki `indirilenler`
-- Tek satırlık ilerleme göstergesi ve playlist sayacı
-- `yt-dlp.exe`, `ffmpeg.exe`, `deno.exe` otomatik kontrolü
-- Daha önce indirilenleri `indirilenler.txt` arşiviyle atlama
-- İsteğe bağlı Firefox çerez desteği
-- Harici Python paketi gerektirmez
+---
 
-## Portable Kullanım
+## İçindekiler
+- [Öne Çıkan Özellikler](#öne-çıkan-özellikler)  
+- [Gereksinimler](#gereksinimler)  
+- [Proje Yapısı ve Önemli Dosyalar](#proje-yapısı-ve-önemli-dosyalar)  
+- [Hızlı Başlatma (Portable & Geliştirme)](#hızlı-başlatma-portable--geliştirme)  
+- [Profiller ve Deno Betiği (yt.ts)](#profiller-ve-deno-betiği-ytts)  
+- [Güncelleme & Paketleme Araçları](#güncelleme--paketleme-araçları)  
+- [Çapraz Platform Davranışları ve Notlar](#çapraz-platform-davranışları-ve-notlar)  
+- [Hata Ayıklama ve Sık Karşılaşılan Sorunlar](#hata-ayıklama-ve-sık-karşılaşılan-sorunlar)  
+- [Lisans ve Yasal Uyarılar / Sorumlu Kullanım](#lisans-ve-yasal-uyarılar--sorumlu-kullanım)  
 
-Uygulama klasörünü açın ve:
+---
 
-```text
-Video Indirici.exe
-```
+## Öne Çıkan Özellikler
+- Taşınabilir paketleme: `MediaDownloader.exe` biçiminde dağıtılabilir paket üretimi.  
+- Profil tabanlı indirme: `video` / `audio` / `playlist` profilleri.  
+- Deno ile unbuffered stdout/stderr akışı: düşük gecikmeli ilerleme, `FILE_DONE` olayları.  
+- `bin/` dizininde yerel ikililerle çalışma: `yt-dlp`, `ffmpeg`, `ffprobe`, `deno`.  
+- Otomatik / manuel ikili güncelleme: `update-bin.sh`.  
+- Portable paket üretimi: `build-portable.sh` ve GitHub Actions workflow'u.  
+- GUI: Türkçe arayüz, sağ-tık (Kes/Kopyala/Yapıştır/Tümünü Seç) içerik menüsü, ilerleme çubuğu, playlist sayaçları.
 
-dosyasını çalıştırın.
+---
 
-Şu dosyalar aynı klasörde kalmalıdır:
+## Gereksinimler
+- **Hedef platform:** Windows (birincil hedef). POSIX (Linux/macOS) üzerinde sınırlı destek vardır.  
+- **Geliştirme ortamı:**
+  - Python 3.8+  
+  - PyInstaller (portable exe üretimi)  
+  - Deno (≥ 1.x)  
+- **Gerekli ikililer (`bin/`):**
+  - `yt-dlp`  
+  - `ffmpeg`  
+  - `ffprobe`  
+  - `deno`
 
-```text
-Video Indirici.exe
-yt-dlp.exe
-ffmpeg.exe
-deno.exe
-_internal
-README.md
-DISCLAIMER.txt
-THIRD_PARTY_NOTICES.txt
-```
+> Not: `build-portable.sh` ve `update-bin.sh` betikleri, CI veya yerel ortamda `bin/` dizinine gerekli araçları koymaya yardımcı olur.
 
-## Kalite Seçenekleri
+---
 
-Uygulama 480p, 720p, 1080p ve 4K seçenekleri sunar. Seçilen kalite, mümkün olan en yüksek eşleşen çözünürlüğü ister. Kaynak videoda seçilen kalite yoksa `yt-dlp` aynı sınır içinde en uygun alternatifi seçer.
+## Proje Yapısı ve Önemli Dosyalar
+- `video_indirici.py` — Python/Tkinter GUI ve uygulama mantığı.  
+- `yt.ts` — Deno yardımcı betik: `yt-dlp` argümanlarını oluşturur, playlist bilgilerini okur, `FILE_DONE` olayları ve anlık çıktı akışı sağlar.  
+- `settings.ts` — Yapılandırma (ytdlp, ffmpeg, profiller, çerez ayarları).  
+- `yt-dlp.conf` — ek `yt-dlp` bayrakları (ör. `--newline`).  
+- `update-bin.sh` — `bin/` içindeki ikilileri indirir / günceller.  
+- `build-portable.sh` — PyInstaller ile portable paket oluşturur.  
+- `.github/workflows/build.yml` — CI workflow (Windows).
 
-4K videolar platforma göre VP9 veya AV1 formatında gelebilir. Bu yüzden 4K seçeneği, 480p/720p/1080p seçeneklerine göre daha esnek format seçimi kullanır.
+---
 
-## İndirme Klasörü ve İlerleme
+## Hızlı Başlatma (Portable & Geliştirme)
+1. `portable-app` veya uygulama klasörünü açın.  
+2. Uygulama exe'si ile aynı dizinde `bin/` klasörünü sağlayın (ör. `portable-app/bin/yt-dlp.exe`).  
+3. **Windows:** `MediaDownloader.exe` çalıştırın.  
+4. Geliştirme:
+   - GUI çalıştırma:  
+     `python video_indirici.py`  
+   - Self-test (GUI olmadan):  
+     `python video_indirici.py --self-test`  
+   - Deno betiğini manuel çalıştırma (örnek):  
+     `deno run --allow-read --allow-write --allow-run yt.ts video "https://..." --output ./downloads`
 
-Uygulama ilk açılışta indirme klasörünü kendi klasöründeki `indirilenler` klasörü olarak ayarlar. Kullanıcı arayüzden farklı bir klasör seçebilir.
+---
 
-Playlist indirirken ilerleme alanı `Video 3/12` gibi sayaç gösterir. Mevcut videonun yüzde, boyut, hız ve ETA bilgisi aynı satırda güncellenir; tekrar eden yt-dlp progress satırları işlem günlüğünü doldurmaz.
+## Profiller ve Deno Betiği (yt.ts)
+- Profiller `settings.ts` içinde tanımlıdır. Örnek:
+  - `video`: video+audio birleştirme, çıktı şablonu.  
+  - `audio`: yalnızca ses, remux/embed seçenekleri.  
+  - `playlist`: playlist odaklı çıktı, padding hesaplaması.  
+- GUI'den seçilen profil, Deno betiğine iletilir; Deno uygun `yt-dlp` argümanlarını oluşturur.  
+- "Firefox çerezlerini kullan" seçilirse Deno `--cookies-from-browser firefox` ekler; çerezler uygulamada saklanmaz.
 
-## Firefox Çerezleri
+---
 
-Bazı videolar giriş, yaş doğrulaması veya bot kontrolü nedeniyle tarayıcı çerezlerine ihtiyaç duyabilir. Arayüzde `Firefox çerezlerini kullan` seçilirse `yt-dlp` yerel Firefox profilinden çerez okur. Bu uygulama çerezleri saklamaz, dışarı göndermez ve ayrı bir hesap bilgisi istemez.
+## Güncelleme & Paketleme Araçları
+- **`update-bin.sh`**: `bin/` içindeki ikilileri (yt-dlp, deno, ffmpeg/ffprobe) indirir/günceller; GitHub Releases API'sini kullanır.  
+- **`build-portable.sh`**: PyInstaller ile `--onedir` üretir, `bin/` ve `.ts` dosyalarını `portable-app` içine kopyalar; POSIX için `chmod +x` uygular.  
+- CI: `.github/workflows/build.yml` Windows üzerinde bu betiği çalıştırır ve `portable-app` artifact'ini yükler.
 
-## Kaynaktan Çalıştırma
+---
 
-Python 3 ile:
+## Çapraz Platform Davranışları ve Notlar
+- Python kodu runtime'da `EXE_EXT` / `IS_WINDOWS` belirleyip `bin/` içindeki isimleri platforma göre uyarlıyor.  
+- `CREATE_NO_WINDOW` gibi `subprocess` parametreleri yalnızca Windows'ta kullanılır.  
+- **Process sonlandırma:**
+  - Windows: `taskkill /PID <pid> /T /F`  
+  - POSIX: `process.terminate()`  
+- Betikler POSIX uyumluluğu düşünülerek genişletildi; ana dağıtım hedefi Windows'tur.
 
-```powershell
-python video_indirici.py
-```
+---
 
-Temel kontrol:
+## Hata Ayıklama ve Sık Karşılaşılan Sorunlar
+- **"Eksik araç dosyası":** `bin/` içinde `yt-dlp`, `ffmpeg`, `ffprobe`, `deno` olduğundan emin olun.  
+- **Playlist çıktıları yanlış yerde:** özel output seçtiyseniz GUI veya `--output` ile base dizini doğru gönderin; `yt.ts` padding hesaplar.  
+- **Canlı ilerleme gözükmüyor:** `yt.ts` stdout/stderr'yi unbuffered okur; yine de `yt-dlp`'nin `--newline`/`--no-quiet` gibi ayarlarının etkin olduğundan emin olun.  
+- **`update-bin.sh` hata veriyorsa:** GitHub API rate-limit veya ağ sorunları olabilir; hata mesajlarını kontrol edin.
 
-```powershell
-python video_indirici.py --self-test
-```
+---
 
-## Paketleme
+## Lisans ve Yasal Uyarılar / Sorumlu Kullanım
+- Üçüncü taraf bileşenler farklı lisanslar altındadır (`yt-dlp`, FFmpeg, Deno vb.). Dağıtmadan önce lisans uyumluluğunu doğrulayın.  
+- Projede lisans/üçüncü taraf notları için `LICENSE` ve `THIRD_PARTY_NOTICES.txt` dosyalarını eklemeyi düşünün.
 
-PyInstaller ile portable onedir build:
-
-```powershell
-python -m PyInstaller --noconfirm --clean --onedir --windowed --name "Video Indirici" video_indirici.py
-```
-
-Son kullanıcı paketi hazırlanırken `dist\Video Indirici` klasörüne yt-dlp.exe, ffmpeg.exe, deno.exe ile gerekli lisans ve dokümantasyon dosyaları eklenir.
-
-## Sorumlu Kullanım
-
+### Sorumlu Kullanım (Türkçe)
 Bu araç yalnızca indirme hakkınız olan içerikler için kullanılmalıdır. Platform kuralları, telif hakları ve bulunduğunuz ülkenin yasaları kullanıcı sorumluluğundadır.
+
+### Responsible Use (English)
+This tool should only be used to download content you have the right to download. Compliance with platform terms of service, copyright law, and the laws of your jurisdiction is the user's responsibility.

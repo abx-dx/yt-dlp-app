@@ -3,13 +3,13 @@
 Basit Türkçe yt-dlp arayüzü.
 
 Bu uygulama taşınabilir (portable) kullanım amacıyla geliştirilmiştir.
-Derlenen MediaDownloader.exe ile aynı dizinde aşağıdaki yapı bulunmalıdır.
+Derlenen MediaDownloader ile aynı dizinde aşağıdaki yapı bulunmalıdır.
 
 Gerekli araçlar (bin):
-    - bin/yt-dlp.exe
-    - bin/ffmpeg.exe
-    - bin/ffprobe.exe
-    - bin/deno.exe
+    - bin/yt-dlp (.exe)
+    - bin/ffmpeg (.exe)
+    - bin/ffprobe (.exe)
+    - bin/deno (.exe)
 
 Ek betikler:
     - Proje kök dizinindeki tüm *.ts dosyaları.
@@ -49,15 +49,17 @@ PROFILE_OPTIONS = {
     "Playlist": "playlist",
 }
 
-TOOL_FILENAMES = {
-    "yt-dlp": "yt-dlp.exe",
-    "ffmpeg": "ffmpeg.exe",
-    "ffprobe": "ffprobe.exe",
-    "deno": "deno.exe",
-}
+# --- ÇAPRAZ PLATFORM DESTEĞİ ---
+# İşletim sistemine göre binary uzantısını ve araç isimlerini tanımlıyoruz
+IS_WINDOWS = sys.platform.startswith("win")
+EXE_EXT = ".exe" if IS_WINDOWS else ""
 
-DOWNLOAD_PERCENT_RE = re.compile(r"^\[download\]\s+(\d+(?:\.\d+)?)%")
-PLAYLIST_COUNTER_RE = re.compile(r"^\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
+TOOL_FILENAMES = {
+    "yt-dlp": f"yt-dlp{EXE_EXT}",
+    "ffmpeg": f"ffmpeg{EXE_EXT}",
+    "ffprobe": f"ffprobe{EXE_EXT}",
+    "deno": f"deno{EXE_EXT}",
+}
 
 
 def get_app_dir() -> Path:
@@ -71,7 +73,8 @@ def get_default_download_dir() -> Path:
 
 
 def get_creation_flags() -> int:
-    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    # CREATE_NO_WINDOW sadece Windows ortamında anlamlıdır
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
 
 
 def build_tool_env(tool_dir: Path) -> Dict[str, str]:
@@ -79,6 +82,10 @@ def build_tool_env(tool_dir: Path) -> Dict[str, str]:
     current_path = env.get("PATH", "")
     env["PATH"] = str(tool_dir) + os.pathsep + current_path
     return env
+
+
+DOWNLOAD_PERCENT_RE = re.compile(r"^\[download\]\s+(\d+(?:\.\d+)?)%")
+PLAYLIST_COUNTER_RE = re.compile(r"^\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
 
 
 def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
@@ -141,7 +148,6 @@ class ToolManager:
                 )
             return name, ToolStatus(name=name, path=path, exists=True)
 
-        # Araçları aynı anda arka planda (paralel) sorgulayalım
         with ThreadPoolExecutor(max_workers=len(TOOL_FILENAMES)) as executor:
             results = executor.map(_check_single, TOOL_FILENAMES.keys())
             for name, status in results:
@@ -164,7 +170,7 @@ class ToolManager:
             result = subprocess.run(
                 args,
                 cwd=str(self.app_dir),
-                env=build_tool_env(self.app_dir),
+                env=build_tool_env(self.app_dir / "bin"),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -210,7 +216,6 @@ def build_download_command(
     return command
 
 
-
 def iter_missing_tools(statuses: Dict[str, ToolStatus]) -> Iterable[ToolStatus]:
     for status in statuses.values():
         if not status.ok:
@@ -244,19 +249,18 @@ class DownloadWorker(threading.Thread):
         process = self.process
         if process and process.poll() is None:
             try:
-                subprocess.run(
-                    [
-                        "taskkill",
-                        "/PID",
-                        str(process.pid),
-                        "/T",
-                        "/F",
-                    ],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                    creationflags=get_creation_flags(),
-                )
+                if IS_WINDOWS:
+                    # Windows için taskkill
+                    subprocess.run(
+                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                        creationflags=get_creation_flags(),
+                    )
+                else:
+                    # Linux / POSIX için yerel sonlandırma
+                    process.terminate()
             except OSError:
                 pass
 
@@ -266,7 +270,7 @@ class DownloadWorker(threading.Thread):
     def run(self) -> None:
         try:
             self._run()
-        except Exception as exc:  # noqa: BLE001 - UI'ya güvenli hata dönmek için.
+        except Exception as exc:
             self.emit("error", f"Beklenmeyen hata: {exc}")
         finally:
             self.emit("done", "finished")
@@ -277,7 +281,7 @@ class DownloadWorker(threading.Thread):
         if missing:
             lines = ["Eksik araç dosyası bulundu:"]
             lines.extend(f"- {status.path.name}" for status in missing)
-            lines.append("Bu dosyalar uygulama exe'si ile aynı klasörde olmalıdır.")
+            lines.append("Bu dosyalar uygulama klasöründeki bin/ altında olmalıdır.")
             self.emit("error", "\n".join(lines))
             return
 
@@ -304,7 +308,7 @@ class DownloadWorker(threading.Thread):
             self.process = subprocess.Popen(
                 command,
                 cwd=str(self.tool_manager.app_dir),
-                env=build_tool_env(self.tool_manager.app_dir),
+                env=build_tool_env(self.tool_manager.app_dir / "bin"),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -374,6 +378,24 @@ class VideoDownloaderApp:
         self.root.after(100, self._process_queue)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    def _add_entry_context_menu(self, entry: ttk.Entry) -> None:
+        menu = tk.Menu(entry, tearoff=0)
+        menu.add_command(label="Kes", command=lambda: entry.event_generate("<<Cut>>"))
+        menu.add_command(label="Kopyala", command=lambda: entry.event_generate("<<Copy>>"))
+        menu.add_command(label="Yapıştır", command=lambda: entry.event_generate("<<Paste>>"))
+        menu.add_separator()
+        menu.add_command(label="Tümünü Seç", command=lambda: entry.select_range(0, tk.END))
+
+        def show_menu(event: tk.Event[Any]) -> None:
+            entry.focus_set()
+            entry.icursor(entry.index(f"@{event.x}"))
+            try:
+                menu.tk_popup(event.x_root, event.y_root)
+            finally:
+                menu.grab_release()
+
+        entry.bind("<Button-3>", show_menu)
+
     def _build_ui(self) -> None:
         style = ttk.Style()
         style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
@@ -393,6 +415,7 @@ class VideoDownloaderApp:
         self.url_entry = ttk.Entry(source_frame, textvariable=self.url_var)
         self.url_entry.grid(row=0, column=0, sticky=tk.EW, padx=10, pady=10)
         self.url_entry.focus_set()
+        self._add_entry_context_menu(self.url_entry)
 
         options_frame = ttk.LabelFrame(main, text="Ayarlar")
         options_frame.pack(fill=tk.X, pady=8)
@@ -420,9 +443,10 @@ class VideoDownloaderApp:
         folder_row = ttk.Frame(options_frame)
         folder_row.grid(row=1, column=1, sticky=tk.EW, padx=10, pady=8)
         folder_row.columnconfigure(0, weight=1)
-        ttk.Entry(folder_row, textvariable=self.output_dir_var).grid(
-            row=0, column=0, sticky=tk.EW
-        )
+        self.output_dir_entry = ttk.Entry(folder_row, textvariable=self.output_dir_var)
+        self.output_dir_entry.grid(row=0, column=0, sticky=tk.EW)
+        self._add_entry_context_menu(self.output_dir_entry)
+
         ttk.Button(
             folder_row,
             text="Seç",
@@ -569,7 +593,7 @@ class VideoDownloaderApp:
             missing_names = ", ".join(status.path.name for status in missing)
             messagebox.showerror(
                 APP_NAME,
-                f"Eksik araç dosyası: {missing_names}\n\nBu dosyalar exe ile aynı klasörde olmalıdır.",
+                f"Eksik araç dosyası: {missing_names}\n\nBu dosyalar bin/ altında olmalıdır.",
             )
             self.refresh_tools()
             return
@@ -692,15 +716,6 @@ def run_self_test() -> int:
         detail = status.version or status.error or str(status.path)
         print(f"{state}: {name} -> {detail}")
         ok = ok and status.ok
-
-    sample_output = app_dir / "self-test-output"
-    required_flags = [
-        "--ffmpeg-location",
-        "--js-runtimes",
-        "--download-archive",
-        "--merge-output-format",
-    ]
-
 
     progress_sample = parse_progress_line("[download]  14.5% of 145.80MiB at 2.20MiB/s ETA 00:56")
     if not progress_sample or progress_sample.get("kind") != "percent":

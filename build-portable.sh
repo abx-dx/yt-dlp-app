@@ -172,8 +172,10 @@ echo "[3/5] Harici araç bağımlılıkları kontrol ediliyor..."
 
 mkdir -p "$PORTABLE_APP_DIR/bin"
 
-DEPENDENCIES=$(grep -oE 'bin[/\\][A-Za-z0-9._-]+\.exe' "$PY_FILE" \
+# .exe uzantısı zorunluluğunu kaldırarak regex'i esnetiyoruz
+DEPENDENCIES=$(grep -oE 'bin[/\\][A-Za-z0-9._-]+' "$PY_FILE" \
     | sed 's|\\|/|g' \
+    | sed 's/\.exe$//' \
     | sort -u)
 
 if [ -z "$DEPENDENCIES" ]; then
@@ -183,8 +185,22 @@ fi
 
 while IFS= read -r DEP
 do
-    FILE_NAME="$(basename "$DEP")"
+    BASE_NAME="$(basename "$DEP")"
+    
+    # İşletim sistemine veya CI ortamına göre uzantı yönetimi
+    if [ "$CI" = "true" ] || [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
+        FILE_NAME="$BASE_NAME"
+    else
+        FILE_NAME="${BASE_NAME}.exe"
+    fi
+
     SOURCE="$TARGET_PROJECT_DIR/bin/$FILE_NAME"
+
+    # Eğer uzantılı dosya bulunamazsa uzantısız halini dene (fallback)
+    if [ ! -f "$SOURCE" ] && [ -f "$TARGET_PROJECT_DIR/bin/$BASE_NAME" ]; then
+        SOURCE="$TARGET_PROJECT_DIR/bin/$BASE_NAME"
+        FILE_NAME="$BASE_NAME"
+    fi
 
     if [ ! -f "$SOURCE" ]; then
         echo "❌ Eksik bağımlılık:"
@@ -199,6 +215,11 @@ done <<< "$DEPENDENCIES"
 
 echo "✅ Bin araçları tamamlandı."
 echo ""
+
+# Linux / POSIX ortamlarında ikililere çalıştırma izni ver (Windows'ta etki etmez)
+if [ "$CI" = "true" ] || [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
+    chmod +x "$PORTABLE_APP_DIR/bin/"* 2>/dev/null || true
+fi
 
 
 # ==============================================================================
@@ -245,3 +266,8 @@ echo ""
 echo "Konum:"
 echo "$DISP_OUTPUT"
 echo "========================================================"
+
+# CI ortamı değilse ve explorer.exe komutu varsa klasörü aç
+if [ "$CI" != "true" ] && command -v explorer.exe >/dev/null 2>&1; then
+    explorer.exe "$(cygpath -w "$PORTABLE_APP_DIR" 2>/dev/null || echo "$PORTABLE_APP_DIR")"
+fi

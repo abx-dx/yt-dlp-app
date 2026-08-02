@@ -90,45 +90,44 @@ fi
 echo ""
 
 # ----------------------------------------------------------
-# 3. FFMPEG & FFPROBE GÜNCELLEME (Release Branch)
+# 3. FFMPEG & FFPROBE GÜNCELLEME (Latest Auto-Build)
 # ----------------------------------------------------------
-echo "[3/3] ffmpeg ve ffprobe güncelleniyor (Release Branch)..."
+echo "[3/3] ffmpeg ve ffprobe güncelleniyor (yt-dlp/FFmpeg-Builds Latest)..."
 
 NEED_FFMPEG_UPDATE=0
 FFMPEG_VERSION_FILE="$BIN_DIR/.ffmpeg_version"
 
-FFMPEG_JSON=$(curl -fsSL https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest)
-REMOTE_DATE=$(echo "$FFMPEG_JSON" | grep -oP '"published_at":\s*"\K[^"]+' | head -n 1)
+# Doğrudan repodaki en son Auto-Build JSON verisini çekiyoruz
+FFMPEG_JSON=$(curl -fsSL https://api.github.com/repos/yt-dlp/FFmpeg-Builds/releases/latest)
 
-# Güvenlik Kontrolü: API yanıtı boş gelirse yanlışlıkla güncelleme tetikleme
-if [ -z "$REMOTE_DATE" ]; then
-    echo "   ❌ FFmpeg sürüm bilgisi GitHub API'den alınamadı (Kota aşımı veya ağ hatası)."
+if [ -z "$FFMPEG_JSON" ]; then
+    echo "    ❌ FFmpeg sürüm bilgisi GitHub API'den alınamadı (Kota aşımı veya ağ hatası)."
 else
-    if [ ! -f "$BIN_DIR/ffmpeg.exe" ] || [ ! -f "$BIN_DIR/ffprobe.exe" ]; then
-        NEED_FFMPEG_UPDATE=1
-    elif [ -f "$FFMPEG_VERSION_FILE" ]; then
-        LOCAL_DATE=$(cat "$FFMPEG_VERSION_FILE")
-        if [ "$LOCAL_DATE" != "$REMOTE_DATE" ]; then
+    # 64-bit Windows GPL ZIP indirme bağlantısını çek
+    FFMPEG_URL=$(echo "$FFMPEG_JSON" | grep -oP '"browser_download_url":\s*"\K[^"]+' | grep -E "win64-gpl\.zip$" | head -n 1)
+    
+    # Güncelleme takibi için yayının benzersiz tarih/saat bilgisini al
+    REMOTE_DATE=$(echo "$FFMPEG_JSON" | grep -oP '"published_at":\s*"\K[^"]+' | head -n 1)
+
+    if [ -z "$FFMPEG_URL" ]; then
+        echo "    ❌ FFmpeg indirme bağlantısı filtrelenemedi."
+    else
+        if [ ! -f "$BIN_DIR/ffmpeg.exe" ] || [ ! -f "$BIN_DIR/ffprobe.exe" ]; then
+            NEED_FFMPEG_UPDATE=1
+        elif [ -f "$FFMPEG_VERSION_FILE" ]; then
+            LOCAL_DATE=$(cat "$FFMPEG_VERSION_FILE")
+            if [ "$LOCAL_DATE" != "$REMOTE_DATE" ]; then
+                NEED_FFMPEG_UPDATE=1
+            fi
+        else
             NEED_FFMPEG_UPDATE=1
         fi
-    else
-        NEED_FFMPEG_UPDATE=1
-    fi
 
-    if [ "$NEED_FFMPEG_UPDATE" -eq 1 ]; then
-        echo "   --> Yeni kararlı FFmpeg sürümü indiriliyor..."
-        FFMPEG_ZIP="$BIN_DIR/ffmpeg_temp.zip"
-        FFMPEG_TEMP_DIR="$BIN_DIR/ffmpeg_temp"
+        if [ "$NEED_FFMPEG_UPDATE" -eq 1 ]; then
+            echo "    --> En son FFmpeg Auto-Build sürümü indiriliyor..."
+            FFMPEG_ZIP="$BIN_DIR/ffmpeg_temp.zip"
+            FFMPEG_TEMP_DIR="$BIN_DIR/ffmpeg_temp"
 
-        FFMPEG_URL=$(get_json_url "$FFMPEG_JSON" "ffmpeg-n.*win64-gpl\.zip$")
-        if [ -z "$FFMPEG_URL" ]; then
-            FFMPEG_URL=$(get_json_url "$FFMPEG_JSON" "win64-gpl\.zip$" | grep -v "master" | head -n 1)
-        fi
-        if [ -z "$FFMPEG_URL" ]; then
-            FFMPEG_URL=$(get_json_url "$FFMPEG_JSON" "win64-gpl\.zip$")
-        fi
-
-        if [ -n "$FFMPEG_URL" ]; then
             if curl -fsSL "$FFMPEG_URL" -o "$FFMPEG_ZIP" && [ -s "$FFMPEG_ZIP" ]; then
                 mkdir -p "$FFMPEG_TEMP_DIR"
                 
@@ -138,25 +137,22 @@ else
                     
                     rm -rf "$FFMPEG_ZIP" "$FFMPEG_TEMP_DIR"
 
-                    # Ekstra Doğrulama: Her iki dosya da hedefe ulaştı mı?
                     if [ -f "$BIN_DIR/ffmpeg.exe" ] && [ -f "$BIN_DIR/ffprobe.exe" ]; then
                         echo "$REMOTE_DATE" > "$FFMPEG_VERSION_FILE"
-                        echo "   ✅ ffmpeg.exe ve ffprobe.exe (Release) başarıyla güncellendi!"
+                        echo "    ✅ ffmpeg.exe ve ffprobe.exe başarıyla güncellendi!"
                     else
-                        echo "   ❌ Hata: FFmpeg/FFprobe dosyaları klasöre taşınamadı."
+                        echo "    ❌ Hata: FFmpeg/FFprobe dosyaları klasöre taşınamadı."
                     fi
                 else
-                    echo "   ❌ FFmpeg ZIP arşivi açılamadı veya bozuk indirildi."
+                    echo "    ❌ FFmpeg ZIP arşivi açılamadı veya bozuk indirildi."
                     rm -rf "$FFMPEG_ZIP" "$FFMPEG_TEMP_DIR"
                 fi
             else
-                echo "   ❌ FFmpeg indirme işlemi başarısız oldu veya 0 byte indi."
+                echo "    ❌ FFmpeg indirme işlemi başarısız oldu veya 0 byte indi."
             fi
         else
-            echo "   ❌ FFmpeg indirme bağlantısı alınamadı."
+            echo "    ✅ ffmpeg ve ffprobe zaten en güncel Auto-Build sürümünde."
         fi
-    else
-        echo "   ✅ ffmpeg ve ffprobe zaten en güncel kararlı sürümde."
     fi
 fi
 

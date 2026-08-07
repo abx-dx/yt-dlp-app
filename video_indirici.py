@@ -11,9 +11,6 @@ Gerekli araçlar (bin):
     - bin/ffprobe (.exe)
     - bin/deno (.exe)
 
-Ek betikler:
-    - Proje kök dizinindeki tüm *.ts dosyaları.
-
 Not:
 Bu açıklama aynı zamanda build-portable.sh betiği tarafından bağımlılık
 tespiti amacıyla kullanılmaktadır. Yukarıdaki araç listesinde yapılacak
@@ -25,22 +22,40 @@ değişiklikler derleme paketine doğrudan yansır.
 from __future__ import annotations
 
 import argparse
-import os
 import queue
-import re
 import subprocess
 import sys
 import threading
 import time
 import tkinter as tk
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, List, Optional, Sequence
+
+# Windows konsol/log akışını UTF-8'e zorlar ve bilinmeyen karakterlerde çökmesini engeller
+try:
+    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
 
 
-APP_NAME = "Video İndirici"
+from toolbox.parser import (
+    ProgressEvent,
+    PlaylistEvent,
+    FileDoneEvent,
+    LogEvent,
+    WarningEvent,
+    ErrorEvent,
+)
+from toolbox.profiles import RESOLUTIONS, get_profile
+from toolbox.runner import YtDlpRunner
+from toolbox.tools import Tools
+
+
+APP_NAME = "Video / Ses / Playlist İndirici"
 APP_VERSION = "1.0"
 
 PROFILE_OPTIONS = {
@@ -49,218 +64,39 @@ PROFILE_OPTIONS = {
     "Playlist": "playlist",
 }
 
-# --- ÇAPRAZ PLATFORM DESTEĞİ ---
-# İşletim sistemine göre binary uzantısını ve araç isimlerini tanımlıyoruz
 IS_WINDOWS = sys.platform.startswith("win")
-EXE_EXT = ".exe" if IS_WINDOWS else ""
-
-TOOL_FILENAMES = {
-    "yt-dlp": f"yt-dlp{EXE_EXT}",
-    "ffmpeg": f"ffmpeg{EXE_EXT}",
-    "ffprobe": f"ffprobe{EXE_EXT}",
-    "deno": f"deno{EXE_EXT}",
-}
-
-
-def get_app_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
-
-
-def get_default_download_dir() -> Path:
-    return get_app_dir() / "indirilenler"
-
-
-def get_creation_flags() -> int:
-    # CREATE_NO_WINDOW sadece Windows ortamında anlamlıdır
-    return getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
-
-
-def build_tool_env(tool_dir: Path) -> Dict[str, str]:
-    env = os.environ.copy()
-    current_path = env.get("PATH", "")
-    env["PATH"] = str(tool_dir) + os.pathsep + current_path
-    return env
-
-
-DOWNLOAD_PERCENT_RE = re.compile(r"^\[download\]\s+(\d+(?:\.\d+)?)%")
-PLAYLIST_COUNTER_RE = re.compile(r"^\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)")
-
-
-def parse_progress_line(line: str) -> Optional[Dict[str, Any]]:
-    counter_match = PLAYLIST_COUNTER_RE.match(line)
-    if counter_match:
-        current = int(counter_match.group(1))
-        total = int(counter_match.group(2))
-        return {"kind": "counter", "current": current, "total": total}
-
-    percent_match = DOWNLOAD_PERCENT_RE.match(line)
-    if percent_match:
-        percent = float(percent_match.group(1))
-        detail = line.split("]", 1)[1].strip() if "]" in line else line
-        return {"kind": "percent", "percent": percent, "detail": detail}
-
-    return None
-
-
-@dataclass(frozen=True)
-class ToolStatus:
-    name: str
-    path: Path
-    exists: bool
-    version: str = ""
-    error: str = ""
-
-    @property
-    def ok(self) -> bool:
-        return self.exists and not self.error
-
-
-class ToolManager:
-    def __init__(self, app_dir: Path):
-        self.app_dir = app_dir
-
-    def path_for(self, name: str) -> Path:
-        return self.app_dir / "bin" / TOOL_FILENAMES[name]
-
-    def check(self, include_versions: bool = False) -> Dict[str, ToolStatus]:
-        statuses: Dict[str, ToolStatus] = {}
-
-        def _check_single(name: str) -> tuple[str, ToolStatus]:
-            path = self.path_for(name)
-            if not path.exists():
-                return name, ToolStatus(
-                    name=name,
-                    path=path,
-                    exists=False,
-                    error=f"{path.name} uygulama klasöründe bulunamadı.",
-                )
-
-            if include_versions:
-                version, error = self._read_version(name, path)
-                return name, ToolStatus(
-                    name=name,
-                    path=path,
-                    exists=True,
-                    version=version,
-                    error=error,
-                )
-            return name, ToolStatus(name=name, path=path, exists=True)
-
-        with ThreadPoolExecutor(max_workers=len(TOOL_FILENAMES)) as executor:
-            results = executor.map(_check_single, TOOL_FILENAMES.keys())
-            for name, status in results:
-                statuses[name] = status
-
-        return statuses
-
-    def all_required_available(self) -> bool:
-        return all(status.ok for status in self.check(include_versions=False).values())
-
-    def _read_version(self, name: str, path: Path) -> tuple[str, str]:
-        args = {
-            "yt-dlp": [str(path), "--version"],
-            "ffmpeg": [str(path), "-version"],
-            "ffprobe": [str(path), "-version"],
-            "deno": [str(path), "--version"],
-        }[name]
-
-        try:
-            result = subprocess.run(
-                args,
-                cwd=str(self.app_dir),
-                env=build_tool_env(self.app_dir / "bin"),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=12,
-                creationflags=get_creation_flags(),
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return "", f"Sürüm okunamadı: {exc}"
-
-        first_line = (result.stdout or "").splitlines()[0:1]
-        version = first_line[0].strip() if first_line else ""
-        if result.returncode != 0:
-            return version, f"Sürüm komutu hata verdi: {result.returncode}"
-        return version, ""
-
-
-def build_download_command(
-    *,
-    tool_manager: ToolManager,
-    url: str,
-    profile: str,
-    output_dir: Path,
-    use_firefox_cookies: bool,
-) -> List[str]:
-    command = [
-        str(tool_manager.path_for("deno")),
-        "run",
-        "--allow-read",
-        "--allow-write",
-        "--allow-run",
-        str(tool_manager.app_dir / "yt.ts"),
-        profile,
-        url,
-        "--output",
-        str(output_dir),
-    ]
-
-    if use_firefox_cookies:
-        command.append("--cookies")
-
-    return command
-
-
-def iter_missing_tools(statuses: Dict[str, ToolStatus]) -> Iterable[ToolStatus]:
-    for status in statuses.values():
-        if not status.ok:
-            yield status
 
 
 class DownloadWorker(threading.Thread):
     def __init__(
         self,
         *,
-        tool_manager: ToolManager,
+        tools: Tools,
         url: str,
-        profile: str,
-        output_dir: Path,
+        profile_name: str,
+        output_dir: Optional[Path],
         use_firefox_cookies: bool,
-        event_queue: "queue.Queue[tuple[str, Any]]",
+        max_resolution: Optional[str] = None,
+        event_queue: queue.Queue[tuple[str, Any]],
     ):
         super().__init__(daemon=True)
-        self.tool_manager = tool_manager
+        self.tools = tools
         self.url = url
-        self.profile = profile
+        self.profile_name = profile_name
         self.output_dir = output_dir
         self.use_firefox_cookies = use_firefox_cookies
+        self.max_resolution = max_resolution
         self.event_queue = event_queue
         self.cancel_requested = threading.Event()
-        self.process: Optional[subprocess.Popen[str]] = None
+        self.runner: Optional[YtDlpRunner] = None
 
     def cancel(self) -> None:
         self.cancel_requested.set()
 
-        process = self.process
-        if process and process.poll() is None:
+        runner = self.runner
+        if runner and hasattr(runner, "stop"):
             try:
-                if IS_WINDOWS:
-                    # Windows için taskkill
-                    subprocess.run(
-                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        check=False,
-                        creationflags=get_creation_flags(),
-                    )
-                else:
-                    # Linux / POSIX için yerel sonlandırma
-                    process.terminate()
+                runner.stop()
             except OSError:
                 pass
 
@@ -276,70 +112,87 @@ class DownloadWorker(threading.Thread):
             self.emit("done", "finished")
 
     def _run(self) -> None:
-        statuses = self.tool_manager.check(include_versions=False)
-        missing = list(iter_missing_tools(statuses))
-        if missing:
-            lines = ["Eksik araç dosyası bulundu:"]
-            lines.extend(f"- {status.path.name}" for status in missing)
-            lines.append("Bu dosyalar uygulama klasöründeki bin/ altında olmalıdır.")
-            self.emit("error", "\n".join(lines))
+        if not self.tools.ytdlp.exists():
+            self.emit("error", f"Eksik araç: {self.tools.ytdlp.name} bin/ klasöründe bulunamadı.")
             return
 
-        try:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            self.emit("error", f"İndirme klasörü oluşturulamadı: {exc}")
-            return
+        out_dir_str = str(self.output_dir) if self.output_dir else None
+        if self.output_dir:
+            try:
+                self.output_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                self.emit("error", f"İndirme klasörü oluşturulamadı: {exc}")
+                return
 
-        command = build_download_command(
-            tool_manager=self.tool_manager,
+        profile = get_profile(self.profile_name)
+
+        self.runner = YtDlpRunner(
+            tools=self.tools,
+            profile=profile,
             url=self.url,
-            profile=self.profile,
-            output_dir=self.output_dir,
-            use_firefox_cookies=self.use_firefox_cookies,
+            output_dir=out_dir_str,
+            use_cookies=self.use_firefox_cookies,
+            max_resolution=self.max_resolution,
         )
 
-        self.emit("log", f"İndirme klasörü: {self.output_dir}")
+        self.emit("log", f"İndirme klasörü: {self.output_dir or 'Varsayılan'}")
         if self.use_firefox_cookies:
             self.emit("log", "Firefox çerezleri kullanılacak. Uygulama çerez kaydetmez.")
-        self.emit("log", "yt-dlp başlatılıyor...")
+
+        self.emit("log", "İndirme başlatılıyor...")
 
         try:
-            self.process = subprocess.Popen(
-                command,
-                cwd=str(self.tool_manager.app_dir),
-                env=build_tool_env(self.tool_manager.app_dir / "bin"),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                creationflags=get_creation_flags(),
-            )
+            self.runner.start()
         except OSError as exc:
             self.emit("error", f"yt-dlp başlatılamadı: {exc}")
             return
 
-        assert self.process.stdout is not None
-        for line in self.process.stdout:
-            if self.cancel_requested.is_set():
-                break
-            clean_line = line.rstrip()
-            if clean_line:
-                progress = parse_progress_line(clean_line)
-                if progress:
-                    self.emit("progress", progress)
-                else:
-                    self.emit("log", clean_line)
+        try:
+            for event in self.runner.events():
+                if self.cancel_requested.is_set():
+                    break
 
-        return_code = self.process.wait()
+                if isinstance(event, PlaylistEvent):
+                    self.emit("event", event)
+                    continue
+
+                if isinstance(event, ProgressEvent):
+                    self.emit("event", event)
+                    continue
+
+                if isinstance(event, FileDoneEvent):
+                    self.emit("log", "")
+                    self.emit("log", event.report)
+                    self.emit("event", event)
+                    self.emit("log", f"İndirme tamamlandı: {event.file_name}")
+                    self.emit("log", "")
+                    continue
+
+                if isinstance(event, WarningEvent):
+                    self.emit("warning", event.text)
+                    continue
+
+                if isinstance(event, ErrorEvent):
+                    self.emit("error", event.text)
+                    continue
+
+                if isinstance(event, LogEvent):
+                    self.emit("log", event.text)
+                    continue
+        except Exception as exc:
+            self.emit("error", f"Olaylar okunurken hata oluştu: {exc}")
+            return
+
+        return_code = self.runner.wait()
         if self.cancel_requested.is_set():
             self.emit("warning", "İndirme kullanıcı tarafından durduruldu.")
             return
 
         if return_code == 0:
-            self.emit("success", "İndirme tamamlandı.")
+            if self.profile_name == "playlist":
+                self.emit("success", "Tüm playlist başarıyla indirildi ve raporlandı.")
+            else:
+                self.emit("success", "İndirme başarıyla tamamlandı ve raporlandı.")
             return
 
         if self.use_firefox_cookies:
@@ -357,20 +210,22 @@ class VideoDownloaderApp:
         self.root.geometry("840x660")
         self.root.minsize(760, 600)
 
-        self.app_dir = get_app_dir()
-        self.tool_manager = ToolManager(self.app_dir)
-        self.event_queue: "queue.Queue[tuple[str, Any]]" = queue.Queue()
+        self.tools = Tools.discover()
+        self.event_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.worker: Optional[DownloadWorker] = None
         self.current_playlist_counter = ""
 
         self.url_var = tk.StringVar()
-        self.output_dir_var = tk.StringVar(value=str(get_default_download_dir()))
+        self.output_dir_var = tk.StringVar(value=str(self.tools.app_dir / "indirilenler"))
         self.use_firefox_cookies_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Hazır.")
         self.progress_var = tk.DoubleVar(value=0.0)
         self.progress_text_var = tk.StringVar(value="Henüz indirme yok.")
         self.tool_status_vars = {
-            name: tk.StringVar(value="Kontrol bekleniyor.") for name in TOOL_FILENAMES
+            "yt-dlp": tk.StringVar(value="Kontrol bekleniyor."),
+            "ffmpeg": tk.StringVar(value="Kontrol bekleniyor."),
+            "ffprobe": tk.StringVar(value="Kontrol bekleniyor."),
+            "deno": tk.StringVar(value="Kontrol bekleniyor."),
         }
 
         self._build_ui()
@@ -408,7 +263,7 @@ class VideoDownloaderApp:
         title = ttk.Label(main, text=APP_NAME, style="Title.TLabel")
         title.pack(anchor=tk.W)
 
-        source_frame = ttk.LabelFrame(main, text="Video / Playlist Linki")
+        source_frame = ttk.LabelFrame(main, text="Video / Ses / Playlist Linki")
         source_frame.pack(fill=tk.X, pady=(12, 8))
         source_frame.columnconfigure(0, weight=1)
 
@@ -425,17 +280,40 @@ class VideoDownloaderApp:
             row=0, column=0, sticky=tk.W, padx=10, pady=8
         )
 
-        self.profile_var = tk.StringVar(value="Video")
+        profile_row = ttk.Frame(options_frame)
+        profile_row.grid(row=0, column=1, sticky=tk.W, padx=10, pady=8)
 
+        self.profile_var = tk.StringVar(value="Video")
         profile_combo = ttk.Combobox(
-            options_frame,
+            profile_row,
             textvariable=self.profile_var,
             values=list(PROFILE_OPTIONS.keys()),
             state="readonly",
-            width=15,
+            width=12,
+        )
+        profile_combo.pack(side=tk.LEFT)
+
+        # Çözünürlük Alanı (Video profilinde yan tarafa açılır)
+        self.res_lbl = ttk.Label(profile_row, text="Çözünürlük:")
+        self.res_var = tk.StringVar(value="En İyi")
+        self.res_combo = ttk.Combobox(
+            profile_row,
+            textvariable=self.res_var,
+            values=RESOLUTIONS,
+            state="readonly",
+            width=14,
         )
 
-        profile_combo.grid(row=0, column=1, sticky=tk.W, padx=10, pady=8)
+        def _on_profile_change(event: Optional[tk.Event[Any]] = None) -> None:
+            if PROFILE_OPTIONS.get(self.profile_var.get()) == "video":
+                self.res_lbl.pack(side=tk.LEFT, padx=(16, 6))
+                self.res_combo.pack(side=tk.LEFT)
+            else:
+                self.res_lbl.pack_forget()
+                self.res_combo.pack_forget()
+
+        profile_combo.bind("<<ComboboxSelected>>", _on_profile_change)
+        _on_profile_change()
 
         ttk.Label(options_frame, text="Klasör:").grid(
             row=1, column=0, sticky=tk.W, padx=10, pady=8
@@ -459,6 +337,34 @@ class VideoDownloaderApp:
             variable=self.use_firefox_cookies_var,
         ).grid(row=2, column=1, sticky=tk.W, padx=10, pady=(0, 10))
 
+        tools_frame = ttk.LabelFrame(main, text="Sistem Araçları Durumu", padding=10)
+        tools_frame.pack(fill=tk.X, pady=(0, 10))
+
+        status_container = ttk.Frame(tools_frame)
+        status_container.pack(fill=tk.X, expand=True, pady=(0, 8))
+
+        tool_map = {
+            "yt-dlp": self.tools.ytdlp,
+            "ffmpeg": self.tools.ffmpeg,
+            "ffprobe": self.tools.ffprobe,
+            "deno": self.tools.deno,
+        }
+
+        for col, (name, path) in enumerate(tool_map.items()):
+            col_frame = ttk.Frame(status_container)
+            col_frame.grid(row=0, column=col, sticky=tk.W, padx=12)
+
+            lbl_title = ttk.Label(col_frame, text=f"{path.name}:")
+            lbl_title.pack(side=tk.LEFT, padx=(0, 4))
+
+            lbl_status = ttk.Label(col_frame, textvariable=self.tool_status_vars[name])
+            lbl_status.pack(side=tk.LEFT)
+
+            status_container.columnconfigure(col, weight=1)
+
+        btn_refresh = ttk.Button(tools_frame, text="Araçları Tekrar Kontrol Et", command=self.refresh_tools)
+        btn_refresh.pack(fill=tk.X, expand=True)
+        
         progress_frame = ttk.LabelFrame(main, text="İlerleme")
         progress_frame.pack(fill=tk.X, pady=8)
         progress_frame.columnconfigure(0, weight=1)
@@ -475,35 +381,6 @@ class VideoDownloaderApp:
             sticky=tk.W,
             padx=10,
             pady=(0, 10),
-        )
-
-        tools_frame = ttk.LabelFrame(main, text="Araç Kontrolü")
-        tools_frame.pack(fill=tk.X, pady=8)
-        tools_frame.columnconfigure(1, weight=1)
-
-        for row, name in enumerate(TOOL_FILENAMES):
-            ttk.Label(tools_frame, text=f"{TOOL_FILENAMES[name]}:").grid(
-                row=row,
-                column=0,
-                sticky=tk.W,
-                padx=10,
-                pady=4,
-            )
-            ttk.Label(tools_frame, textvariable=self.tool_status_vars[name], style="Hint.TLabel").grid(
-                row=row,
-                column=1,
-                sticky=tk.W,
-                padx=10,
-                pady=4,
-            )
-
-        ttk.Button(tools_frame, text="Tekrar Kontrol Et", command=self.refresh_tools).grid(
-            row=0,
-            column=2,
-            rowspan=4,
-            sticky=tk.NS,
-            padx=10,
-            pady=8,
         )
 
         action_frame = ttk.Frame(main)
@@ -542,7 +419,7 @@ class VideoDownloaderApp:
     def choose_output_dir(self) -> None:
         selected = filedialog.askdirectory(
             title="İndirme klasörünü seç",
-            initialdir=self.output_dir_var.get() or str(get_default_download_dir()),
+            initialdir=self.output_dir_var.get() or str(self.tools.app_dir / "indirilenler"),
         )
         if selected:
             self.output_dir_var.set(selected)
@@ -553,19 +430,23 @@ class VideoDownloaderApp:
         thread.start()
 
     def _refresh_tools_worker(self) -> None:
-        statuses = self.tool_manager.check(include_versions=True)
-        for name, status in statuses.items():
-            if not status.exists:
-                text = "Eksik"
-            elif status.error:
-                text = status.error
-            elif status.version:
-                text = f"Tamam - {status.version}"
-            else:
+        tool_map = {
+            "yt-dlp": self.tools.ytdlp,
+            "ffmpeg": self.tools.ffmpeg,
+            "ffprobe": self.tools.ffprobe,
+            "deno": self.tools.deno,
+        }
+
+        all_ok = True
+        for name, path in tool_map.items():
+            if path.exists():
                 text = "Tamam"
+            else:
+                text = "Eksik"
+                all_ok = False
             self.event_queue.put((f"tool:{name}", text))
 
-        if all(status.ok for status in statuses.values()):
+        if all_ok:
             self.event_queue.put(("status", "Hazır."))
         else:
             self.event_queue.put(("status", "Eksik araç var."))
@@ -577,7 +458,7 @@ class VideoDownloaderApp:
 
         url = self.url_var.get().strip()
         if not url:
-            messagebox.showwarning(APP_NAME, "Video veya playlist linki girin.")
+            messagebox.showwarning(APP_NAME, "Video, ses veya playlist linki girin.")
             self.url_entry.focus_set()
             return
 
@@ -586,14 +467,12 @@ class VideoDownloaderApp:
             self.url_entry.focus_set()
             return
 
-        output_dir = Path(self.output_dir_var.get().strip() or str(get_default_download_dir()))
-        statuses = self.tool_manager.check(include_versions=False)
-        missing = list(iter_missing_tools(statuses))
-        if missing:
-            missing_names = ", ".join(status.path.name for status in missing)
+        output_dir = Path(self.output_dir_var.get().strip() or str(self.tools.app_dir / "indirilenler"))
+
+        if not self.tools.ytdlp.exists():
             messagebox.showerror(
                 APP_NAME,
-                f"Eksik araç dosyası: {missing_names}\n\nBu dosyalar bin/ altında olmalıdır.",
+                f"Eksik araç dosyası: {self.tools.ytdlp.name}\n\nBu dosya bin/ altında olmalıdır.",
             )
             self.refresh_tools()
             return
@@ -603,17 +482,24 @@ class VideoDownloaderApp:
         self.progress_var.set(0.0)
         self.progress_text_var.set("Başlatılıyor...")
         self._append_log(f"{APP_NAME} {APP_VERSION}")
-        self._append_log(f"Uygulama klasörü: {self.app_dir}")
+        self._append_log(f"Uygulama klasörü: {self.tools.app_dir}")
         self.status_var.set("İndirme çalışıyor...")
         self.start_button.configure(state=tk.DISABLED)
         self.cancel_button.configure(state=tk.NORMAL)
 
+        profile_key = PROFILE_OPTIONS[self.profile_var.get()]
+        selected_res = (
+            self.res_var.get()
+            if profile_key == "video"
+            else None
+)
         self.worker = DownloadWorker(
-            tool_manager=self.tool_manager,
+            tools=self.tools,
             url=url,
-            profile=PROFILE_OPTIONS[self.profile_var.get()],
+            profile_name=profile_key,
             output_dir=output_dir,
             use_firefox_cookies=self.use_firefox_cookies_var.get(),
+            max_resolution=selected_res,
             event_queue=self.event_queue,
         )
         self.worker.start()
@@ -635,8 +521,8 @@ class VideoDownloaderApp:
                     self.status_var.set(text)
                 elif event_type == "log":
                     self._append_log(text)
-                elif event_type == "progress":
-                    self._update_progress(text)
+                elif event_type == "event":
+                    self._handle_event(text)                    
                 elif event_type == "success":
                     self._append_log(text)
                     self.status_var.set("Tamamlandı.")
@@ -659,29 +545,53 @@ class VideoDownloaderApp:
             pass
         self.root.after(100, self._process_queue)
 
-    def _update_progress(self, payload: Any) -> None:
-        if not isinstance(payload, dict):
-            return
+    def _handle_event(self, event: Any) -> None:
 
-        if payload.get("kind") == "counter":
-            current = payload.get("current")
-            total = payload.get("total")
-            self.current_playlist_counter = f"Video {current}/{total}"
+        if isinstance(event, PlaylistEvent):
+            self.current_playlist_counter = f"Video {event.current}/{event.total}"
             self.progress_var.set(0.0)
-            self.progress_text_var.set(f"{self.current_playlist_counter} | Video hazırlanıyor...")
+            self.progress_text_var.set(
+                f"{self.current_playlist_counter} | Video hazırlanıyor..."
+            )
             return
 
-        if payload.get("kind") == "percent":
-            percent = float(payload.get("percent", 0.0))
-            detail = str(payload.get("detail", "")).strip()
-            self.progress_var.set(max(0.0, min(100.0, percent)))
-            prefix = f"{self.current_playlist_counter} | " if self.current_playlist_counter else ""
-            self.progress_text_var.set(f"{prefix}{detail}")
+        if isinstance(event, ProgressEvent):
+            self.progress_var.set(max(0.0, min(100.0, event.percent)))
+
+            prefix = (
+                f"{self.current_playlist_counter} | "
+                if self.current_playlist_counter
+                else ""
+            )
+
+            speed = getattr(event, "speed", "") or "?"
+            eta = getattr(event, "eta", "") or "?"
+
+            self.progress_text_var.set(
+                f"{prefix}{event.percent:.1f}% | {speed} | ETA {eta}"
+            )
+            return
+
+        if isinstance(event, FileDoneEvent):
+            self.progress_var.set(100.0)
+
+            prefix = (
+                f"{self.current_playlist_counter} | "
+                if self.current_playlist_counter
+                else ""
+            )
+
+            self.progress_text_var.set(
+                f"{prefix}Tamamlandı: {event.file_name}"
+            )
 
     def _append_log(self, text: str) -> None:
         timestamp = time.strftime("%H:%M:%S")
         self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, f"[{timestamp}] {text}\n")
+        if text == "":
+            self.log_text.insert(tk.END, "\n")
+        else:
+            self.log_text.insert(tk.END, f"[{timestamp}] {text}\n")
         self.log_text.configure(state=tk.DISABLED)
         self.log_text.see(tk.END)
 
@@ -691,7 +601,7 @@ class VideoDownloaderApp:
         self.log_text.configure(state=tk.DISABLED)
 
     def _on_close(self) -> None:
-        if self.worker and self.worker.is_alive():
+        if self.worker is not None and self.worker.is_alive():
             should_close = messagebox.askyesno(
                 APP_NAME,
                 "İndirme devam ediyor. Uygulamadan çıkılsın mı?",
@@ -699,45 +609,40 @@ class VideoDownloaderApp:
             if not should_close:
                 return
             self.worker.cancel()
+            self.worker.join(timeout=5.0)
         self.root.destroy()
 
 
 def run_self_test() -> int:
-    app_dir = get_app_dir()
-    tool_manager = ToolManager(app_dir)
-    statuses = tool_manager.check(include_versions=True)
+    tools = Tools.discover()
     print(f"{APP_NAME} {APP_VERSION} self-test")
-    print(f"App dir: {app_dir}")
-    print(f"Default downloads: {get_default_download_dir()}")
+    print(f"App dir: {tools.app_dir}")
 
     ok = True
-    for name, status in statuses.items():
-        state = "OK" if status.ok else "FAIL"
-        detail = status.version or status.error or str(status.path)
-        print(f"{state}: {name} -> {detail}")
-        ok = ok and status.ok
+    tool_map = {
+        "yt-dlp": tools.ytdlp,
+        "ffmpeg": tools.ffmpeg,
+        "ffprobe": tools.ffprobe,
+        "deno": tools.deno,
+    }
 
-    progress_sample = parse_progress_line("[download]  14.5% of 145.80MiB at 2.20MiB/s ETA 00:56")
-    if not progress_sample or progress_sample.get("kind") != "percent":
-        print("FAIL: yüzde ilerleme satırı parse edilemedi")
-        ok = False
-
-    counter_sample = parse_progress_line("[download] Downloading item 3 of 12")
-    if not counter_sample or counter_sample.get("current") != 3 or counter_sample.get("total") != 12:
-        print("FAIL: playlist sayaç satırı parse edilemedi")
-        ok = False
+    for name, path in tool_map.items():
+        exists = path.exists()
+        state = "OK" if exists else "FAIL"
+        print(f"{state}: {name} -> {path}")
+        ok = ok and exists
 
     print("Command check:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=APP_NAME)
     parser.add_argument("--self-test", action="store_true", help="GUI açmadan temel kontrolleri çalıştırır.")
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
     if args.self_test:
         return run_self_test()

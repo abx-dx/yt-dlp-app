@@ -4,7 +4,49 @@ All notable changes recorded commit-by-commit from the provided diffs (entries t
 
 ---
 
-## HEAD — refactor(build): cross-platform build & runtime improvements
+## HEAD — refactor(tooling): integrate Python 'toolbox' modules; remove Deno helper (yt.ts)
+Author: abx-dx  
+Date: 2026-08-06  
+Message: Replace the Deno helper script with a native Python toolbox package; add runner/parser/tools to orchestrate yt-dlp and improve cross-platform behavior
+
+Highlights:
+- Major architecture change:
+  - Removed Deno helper files: `yt.ts`, `settings.ts`, and `deno.json`.
+  - Added a Python-first "toolbox" package to centralize download logic and utilities:
+    - `toolbox/command.py`, `cookies.py`, `metadata.py`, `output.py`, `parser.py`, `playlist.py`, `playlist_info.py`, `profiles.py`, `runner.py`, `tools.py`, `__init__.py`.
+  - The GUI (`video_indirici.py`) now uses Toolbox classes (Tools, YtDlpRunner, OutputParser, profiles) instead of invoking the Deno script.
+- New/changed behaviors:
+  - Directly spawn `yt-dlp` from Python (via YtDlpRunner) with unbuffered stdout handling and typed events (ProgressEvent, PlaylistEvent, FileDoneEvent, WarningEvent, ErrorEvent, LogEvent).
+  - Output parsing and FILE_DONE reporting moved into Python (toolbox.parser + toolbox.metadata) to produce richer reports and resolution-aware messages.
+  - Profiles and format-building logic moved to Python (`toolbox.profiles`) with a video max-resolution option (build_video_format / RESOLUTIONS).
+  - Tools discovery and environment management consolidated in `toolbox.tools` (Tools.discover and env()) — bin/ is added to PATH for subprocesses.
+  - Runner stop/termination handles child processes safely across OS: taskkill on Windows, terminate on POSIX; subprocess args prevent windows popups.
+  - DownloadWorker refactored to use YtDlpRunner and toolbox events; reports playlist counters and formatted FileDone reports to GUI.
+- Packaging/build changes:
+  - `build-portable.sh` updated:
+    - Scans Python project and toolbox subpackage for bin dependencies.
+    - Avoids copying TypeScript files; the TypeScript copy step was removed.
+    - Maintains cross-platform filename handling and fallback when .exe is absent.
+  - `.gitignore` extended (added `.cache/`).
+- UI changes:
+  - `video_indirici.py` UI refreshed:
+    - New app title ("Video / Ses / Playlist İndirici"), resolution combobox shown for video profile, improved tools status panel listing `yt-dlp`, `ffmpeg`, `ffprobe`, `deno`.
+    - Right-click context menu and improved encoding handling for stdout/stderr reconfiguration on Windows.
+    - More robust self-test and tool status refresh logic.
+- Removed/Deleted files:
+  - `deno.json`, `settings.ts`, `yt.ts` (Deno helper stack removed).
+- Rationale:
+  - Simplify distribution and runtime by reducing the cross-language dependency surface.
+  - Move real-time parsing and event handling into Python to allow richer GUI integration and improved cross-platform process handling.
+
+Files modified/added/removed in this change:
+- Added: `toolbox/*` (command.py, cookies.py, metadata.py, output.py, parser.py, playlist.py, playlist_info.py, profiles.py, runner.py, tools.py, __init__.py)
+- Modified: `build-portable.sh`, `video_indirici.py`, `.gitignore`, `CHANGELOG.md`, `README.md`
+- Removed: `deno.json`, `settings.ts`, `yt.ts`
+
+---
+
+## 0277710 — refactor(build): cross-platform build & runtime improvements
 Author: abx-dx  
 Date: 2026-08-02 23:22:22 +0300  
 Message: Relax dependency matching, improve cross-platform binary handling, refine ffmpeg update logic, and add UI context menus

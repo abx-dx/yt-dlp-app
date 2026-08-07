@@ -11,7 +11,7 @@ jobs:
       - name: Kodları Kopyala (Checkout)
         uses: actions/checkout@v4
         with:
-          ref: deno-integration
+          ref: refactor/py-core
 
       - name: Python Kurulumu
         uses: actions/setup-python@v5

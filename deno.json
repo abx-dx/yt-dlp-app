@@ -1,5 +1,0 @@
-{
-  "tasks": {
-    "yt": "deno run --allow-read --allow-write --allow-run yt.ts"
-  }
-}

@@ -146,6 +146,7 @@ echo "[2/5] PyInstaller derlemesi..."
         --noconfirm \
         --onedir \
         --windowed \
+        --collect-submodules toolbox \
         --log-level WARN \
         --name "MediaDownloader" \
         video_indirici.py
@@ -172,46 +173,45 @@ echo "[3/5] Harici araç bağımlılıkları kontrol ediliyor..."
 
 mkdir -p "$PORTABLE_APP_DIR/bin"
 
-# .exe uzantısı zorunluluğunu kaldırarak regex'i esnetiyoruz
-DEPENDENCIES=$(grep -oE 'bin[/\\][A-Za-z0-9._-]+' "$PY_FILE" \
+# Proje içindeki ve toolbox altındaki tüm .py dosyalarında bin bağımlılıklarını tara
+DEPENDENCIES=$(find "$TARGET_PROJECT_DIR" -maxdepth 2 -name "*.py" -exec grep -oE 'bin[/\\][A-Za-z0-9._-]+' {} + \
     | sed 's|\\|/|g' \
     | sed 's/\.exe$//' \
     | sort -u)
 
 if [ -z "$DEPENDENCIES" ]; then
-    echo "❌ HATA: video_indirici.py içinde bin bağımlılığı bulunamadı."
-    exit 1
+    echo "⚠️ UYARI: Herhangi bir bin bağımlılığı bulunamadı."
+else
+    while IFS= read -r DEP
+    do
+        BASE_NAME="$(basename "$DEP")"
+        
+        # İşletim sistemine veya CI ortamına göre uzantı yönetimi
+        if [ "$CI" = "true" ] || [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
+            FILE_NAME="$BASE_NAME"
+        else
+            FILE_NAME="${BASE_NAME}.exe"
+        fi
+
+        SOURCE="$TARGET_PROJECT_DIR/bin/$FILE_NAME"
+
+        # Eğer uzantılı dosya bulunamazsa uzantısız halini dene (fallback)
+        if [ ! -f "$SOURCE" ] && [ -f "$TARGET_PROJECT_DIR/bin/$BASE_NAME" ]; then
+            SOURCE="$TARGET_PROJECT_DIR/bin/$BASE_NAME"
+            FILE_NAME="$BASE_NAME"
+        fi
+
+        if [ ! -f "$SOURCE" ]; then
+            echo "❌ Eksik bağımlılık:"
+            echo "   $SOURCE"
+            exit 1
+        fi
+
+        cp "$SOURCE" "$PORTABLE_APP_DIR/bin/"
+        echo "   + $FILE_NAME"
+
+    done <<< "$DEPENDENCIES"
 fi
-
-while IFS= read -r DEP
-do
-    BASE_NAME="$(basename "$DEP")"
-    
-    # İşletim sistemine veya CI ortamına göre uzantı yönetimi
-    if [ "$CI" = "true" ] || [[ "$(uname -s)" != "MINGW"* && "$(uname -s)" != "MSYS"* ]]; then
-        FILE_NAME="$BASE_NAME"
-    else
-        FILE_NAME="${BASE_NAME}.exe"
-    fi
-
-    SOURCE="$TARGET_PROJECT_DIR/bin/$FILE_NAME"
-
-    # Eğer uzantılı dosya bulunamazsa uzantısız halini dene (fallback)
-    if [ ! -f "$SOURCE" ] && [ -f "$TARGET_PROJECT_DIR/bin/$BASE_NAME" ]; then
-        SOURCE="$TARGET_PROJECT_DIR/bin/$BASE_NAME"
-        FILE_NAME="$BASE_NAME"
-    fi
-
-    if [ ! -f "$SOURCE" ]; then
-        echo "❌ Eksik bağımlılık:"
-        echo "   $SOURCE"
-        exit 1
-    fi
-
-    cp "$SOURCE" "$PORTABLE_APP_DIR/bin/"
-    echo "   + $FILE_NAME"
-
-done <<< "$DEPENDENCIES"
 
 echo "✅ Bin araçları tamamlandı."
 echo ""
@@ -223,29 +223,19 @@ fi
 
 
 # ==============================================================================
-# TYPESCRIPT DOSYALARI
+# EK ASSET / REPO DOSYALARI
 # ==============================================================================
 
-echo "[4/5] TypeScript dosyaları kopyalanıyor..."
+echo "[4/5] Ek konfigürasyon ve statik dosyalar kontrol ediliyor..."
 
-shopt -s nullglob
-
-TS_FILES=("$TARGET_PROJECT_DIR"/*.ts)
-
-if [ ${#TS_FILES[@]} -eq 0 ]; then
-    echo "❌ HATA: Proje kökünde .ts dosyası bulunamadı."
-    exit 1
+if [ -f "$TARGET_PROJECT_DIR/bin/yt-dlp.conf" ]; then
+    cp "$TARGET_PROJECT_DIR/bin/yt-dlp.conf" "$PORTABLE_APP_DIR/bin/"
+    echo "   + bin/yt-dlp.conf"
+else
+    echo "⚠️ UYARI: bin/yt-dlp.conf dosyası bulunamadı."
 fi
 
-for TS in "${TS_FILES[@]}"
-do
-    cp "$TS" "$PORTABLE_APP_DIR/"
-    echo "   + $(basename "$TS")"
-done
-
-shopt -u nullglob
-
-echo "✅ TypeScript dosyaları tamamlandı."
+echo "✅ Ek dosyalar kontrolü tamamlandı."
 echo ""
 
 

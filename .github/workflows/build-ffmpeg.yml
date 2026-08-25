@@ -1,0 +1,73 @@
+name: Custom FFmpeg Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-yasm
+            mingw-w64-x86_64-nasm
+
+      - name: Checkout FFmpeg Release Branch
+        uses: actions/checkout@v4
+        with:
+          repository: FFmpeg/FFmpeg
+          ref: release/6.1
+          path: ffmpeg_src
+
+      - name: Configure and Build
+        shell: msys2 {0}
+        run: |
+          cd ffmpeg_src
+
+          ./configure \
+            --target-os=mingw32 \
+            --arch=x86_64 \
+            --disable-everything \
+            --disable-doc \
+            --disable-debug \
+            --disable-version3 \
+            --disable-autodetect \
+            --enable-ffmpeg \
+            --enable-ffprobe \
+            --enable-protocol=file,pipe \
+            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp \
+            --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm \
+            --enable-decoder=mjpeg,webp \
+            --enable-encoder=mjpeg \
+            --enable-parser=opus,vp9,av1,h264,mjpeg \
+            --enable-bsf=mjpeg2jpeg,opus_metadata \
+            --enable-filter=crop,scale,format \
+            --enable-swscale \
+            --enable-small \
+            --extra-cflags="-Os" \
+            --extra-ldflags="-static -static-libgcc -static-libstdc++"
+
+          make -j$(nproc)
+
+      - name: Archive Binaries
+        shell: bash
+        run: |
+          mkdir -p build_bin
+          cp ffmpeg_src/ffmpeg.exe build_bin/
+          cp ffmpeg_src/ffprobe.exe build_bin/
+          cd build_bin
+          7z a -tzip ../ffmpeg-win-x64.zip ffmpeg.exe ffprobe.exe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-win-x64
+          path: ffmpeg-win-x64.zip

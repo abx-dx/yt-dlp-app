@@ -1,0 +1,8 @@
+name: Custom FFmpeg Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: abx-dx/yt-dlp-app/.github/workflows/build-ffmpeg.yml@build-infra

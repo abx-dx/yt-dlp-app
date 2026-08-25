@@ -40,30 +40,12 @@ REQUIREMENTS_FILE="$TARGET_PROJECT_DIR/requirements.txt"
 CORE_SOURCE_DIR="$PORTABLE_ROOT/projects/yt-dlp-core"
 
 # ==============================================================================
-# FFmpeg REPOSITORY
-# ==============================================================================
-
-FFMPEG_REPO_DIR="$PORTABLE_ROOT/projects/yt-dlp-downloader"
-
-FFMPEG_REPO="abx-dx/yt-dlp-downloader"
-FFMPEG_BRANCH="refactor/py-core"
-
-# Kısa SHA kullanılabilir.
-# Script bunu gerçek commit SHA'ya çözer.
-FFMPEG_BASE_COMMIT="edd0133"
-
-FFMPEG_WORKFLOW=".github/workflows/build-ffmpeg.yml"
-FFMPEG_BIN_DIR="$FFMPEG_REPO_DIR/build_bin"
-
-# ==============================================================================
 # DURUM
 # ==============================================================================
 
 BUILD_SUCCESS=0
 BUILD_INTERRUPTED=0
 
-# Workflow run ID
-TRIGGERED_RUN_ID=""
 
 # ==============================================================================
 # WINDOWS GÖRÜNTÜ YOLLARI
@@ -100,104 +82,10 @@ echo "Proje       : $DISP_PROJECT"
 echo "Portable    : $DISP_ROOT"
 echo "Dev Venv    : $DISP_DEV_VENV"
 echo "Venv        : $DISP_VENV"
-echo "Çıktı        : $DISP_OUTPUT"
+echo "Çıktı       : $DISP_OUTPUT"
 echo "Core        : $DISP_CORE"
-echo "FFmpeg repo : $FFMPEG_REPO"
-echo "FFmpeg base : $FFMPEG_BASE_COMMIT"
-echo "Branch      : $FFMPEG_BRANCH"
 echo "========================================================"
 echo ""
-
-# ==============================================================================
-# FFmpeg REPOSITORY KONTROL / TEMİZLEME
-# ==============================================================================
-
-reset_ffmpeg_repo() {
-
-    echo ""
-    echo "→ FFmpeg repository kontrol ediliyor..."
-
-    if [ ! -d "$FFMPEG_REPO_DIR/.git" ]; then
-
-        echo "❌ FFmpeg Git repository bulunamadı:"
-        echo "   $FFMPEG_REPO_DIR"
-
-        return 1
-
-    fi
-
-    # Hedef kısa SHA'yı gerçek commit SHA'ya çöz.
-    local target_commit
-
-    if ! target_commit="$(
-        git -C "$FFMPEG_REPO_DIR" rev-parse \
-            "${FFMPEG_BASE_COMMIT}^{commit}"
-    )"; then
-
-        echo "❌ Hedef commit bulunamadı:"
-        echo "   $FFMPEG_BASE_COMMIT"
-
-        return 1
-
-    fi
-
-    local current_commit
-
-    current_commit="$(
-        git -C "$FFMPEG_REPO_DIR" rev-parse HEAD
-    )"
-
-    echo "   Mevcut commit : $current_commit"
-    echo "   Hedef commit  : $target_commit"
-    echo "   Hedef kısa SHA: $FFMPEG_BASE_COMMIT"
-
-    # --------------------------------------------------------------------------
-    # Zaten tam olarak istediğimiz commit'teysek:
-    # hiçbir reset / temizleme / push yapılmaz.
-    # --------------------------------------------------------------------------
-
-    if [ "$current_commit" = "$target_commit" ]; then
-
-        echo "   ✅ Repository zaten hedef commit'te."
-        echo "   → Temizleme/reset/push atlanıyor."
-
-        return 0
-
-    fi
-
-    # --------------------------------------------------------------------------
-    # Farklı commit → hedef commit'e dön.
-    # --------------------------------------------------------------------------
-
-    echo "   → Repository hedef commit'e döndürülüyor..."
-
-    if ! git -C "$FFMPEG_REPO_DIR" reset \
-        --hard \
-        "$target_commit"; then
-
-        echo "❌ Lokal reset başarısız."
-
-        return 1
-
-    fi
-
-    echo "   → Remote branch hedef commit'e döndürülüyor..."
-
-    if ! git -C "$FFMPEG_REPO_DIR" push \
-        origin \
-        "$target_commit:$FFMPEG_BRANCH" \
-        --force; then
-
-        echo "❌ Remote reset başarısız."
-
-        return 1
-
-    fi
-
-    echo "   ✅ FFmpeg repository hedef commit'e getirildi."
-
-    return 0
-}
 
 # ==============================================================================
 # CTRL+C
@@ -230,15 +118,6 @@ cleanup() {
     echo "========================================================"
     echo "🧹 ÇIKIŞ TEMİZLİĞİ"
     echo "========================================================"
-
-    # Build ne şekilde biterse bitsin FFmpeg repo hedef commit'e döndürülür.
-    if ! reset_ffmpeg_repo; then
-
-        echo ""
-        echo "❌ FFmpeg repository otomatik olarak temizlenemedi."
-        echo "   Hedef commit: $FFMPEG_BASE_COMMIT"
-
-    fi
 
     rm -rf "$BUILD_DIR"
 
@@ -279,7 +158,7 @@ trap cleanup EXIT
 # 1 — ÖN KONTROLLER
 # ==============================================================================
 
-echo "[1/10] Ortam kontrol ediliyor..."
+echo "[1/7] Ortam kontrol ediliyor..."
 
 if [ ! -f "$DEV_VENV_PYTHON" ]; then
 
@@ -317,15 +196,6 @@ if [ ! -d "$CORE_SOURCE_DIR/toolbox" ]; then
 
 fi
 
-if [ ! -d "$FFMPEG_REPO_DIR/.git" ]; then
-
-    echo "❌ FFmpeg repository bulunamadı:"
-    echo "   $FFMPEG_REPO_DIR"
-
-    exit 1
-
-fi
-
 if ! command -v git >/dev/null 2>&1; then
 
     echo "❌ Git bulunamadı."
@@ -356,27 +226,10 @@ echo "   Geliştirme Venv Python:"
 echo ""
 
 # ==============================================================================
-# 2 — FFmpeg BAŞLANGIÇ KONTROLÜ
+# 2 — DIST TEMİZLİĞİ
 # ==============================================================================
 
-echo "[2/10] FFmpeg başlangıç kontrolü..."
-
-if ! reset_ffmpeg_repo; then
-
-    echo ""
-    echo "❌ FFmpeg repository hazırlığı başarısız."
-
-    exit 1
-
-fi
-
-echo ""
-
-# ==============================================================================
-# 3 — DIST TEMİZLİĞİ
-# ==============================================================================
-
-echo "[3/10] Eski dist klasörü temizleniyor..."
+echo "[2/7] Eski dist klasörü temizleniyor..."
 
 if [ -d "$DIST_DIR" ]; then
 
@@ -410,10 +263,10 @@ echo "   ✅ dist temizlendi."
 echo ""
 
 # ==============================================================================
-# 4 — GERÇEK PORTABLE VENV
+# 3 — GERÇEK PORTABLE VENV
 # ==============================================================================
 
-echo "[4/10] Portable venv oluşturuluyor..."
+echo "[3/7] Portable venv oluşturuluyor..."
 
 # Geliştirme venv'sindeki Python kullanılarak
 # dist/python altında yeni ve bağımsız bir Windows venv oluşturulur.
@@ -456,10 +309,10 @@ echo "   ✅ Portable venv hazır."
 echo ""
 
 # ==============================================================================
-# 5 — PYTHON BAĞIMLILIKLARI
+# 4 — PYTHON BAĞIMLILIKLARI
 # ==============================================================================
 
-echo "[5/10] Python bağımlılıkları kuruluyor..."
+echo "[4/7] Python bağımlılıkları kuruluyor..."
 
 "$DEV_VENV_PYTHON" -m pip install \
     --disable-pip-version-check \
@@ -535,10 +388,10 @@ echo "   ✅ Python bağımlılıkları hazır."
 echo ""
 
 # ==============================================================================
-# 6 — WEB DOSYALARI
+# 5 — WEB DOSYALARI
 # ==============================================================================
 
-echo "[6/10] Web uygulaması hazırlanıyor..."
+echo "[5/7] Web uygulaması hazırlanıyor..."
 
 mkdir -p "$PORTABLE_WEB_DIR"
 
@@ -611,430 +464,36 @@ echo "      $INSTALLED_CRUMB"
 echo ""
 
 # ==============================================================================
-# 7 — CUSTOM FFmpeg WORKFLOW
+# 6 — CUSTOM FFmpeg
 # ==============================================================================
 
-echo "[7/10] Custom FFmpeg workflow hazırlanıyor..."
+echo "[6/7] Custom FFmpeg hazırlanıyor..."
 
-mkdir -p \
-    "$(dirname "$FFMPEG_REPO_DIR/$FFMPEG_WORKFLOW")"
+FFMPEG_BUILDER="$PORTABLE_ROOT/projects/yt-dlp-build-infra/ffmpeg/build-ffmpeg.sh"
 
-cat > "$FFMPEG_REPO_DIR/$FFMPEG_WORKFLOW" <<'YAML'
-name: On-The-Fly Custom FFmpeg Build
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build-windows:
-    runs-on: windows-latest
-
-    steps:
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            base-devel
-            git
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-yasm
-            mingw-w64-x86_64-nasm
-
-      - name: Checkout FFmpeg Release Branch
-        uses: actions/checkout@v4
-        with:
-          repository: FFmpeg/FFmpeg
-          ref: release/6.1
-          path: ffmpeg_src
-
-      - name: Configure and Build
-        shell: msys2 {0}
-        run: |
-          cd ffmpeg_src
-
-          ./configure \
-            --target-os=mingw32 \
-            --arch=x86_64 \
-            --disable-everything \
-            --disable-doc \
-            --disable-debug \
-            --disable-version3 \
-            --disable-autodetect \
-            --enable-ffmpeg \
-            --enable-ffprobe \
-            --enable-protocol=file,pipe \
-            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp \
-            --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm \
-            --enable-decoder=mjpeg,webp \
-            --enable-encoder=mjpeg \
-            --enable-parser=opus,vp9,av1,h264,mjpeg \
-            --enable-bsf=mjpeg2jpeg,opus_metadata \
-            --enable-filter=crop,scale,format \
-            --enable-swscale \
-            --enable-small \
-            --extra-cflags="-Os" \
-            --extra-ldflags="-static -static-libgcc -static-libstdc++"
-
-          make -j$(nproc)
-
-      - name: Archive Binaries
-        shell: bash
-        run: |
-          mkdir -p build_bin
-          cp ffmpeg_src/ffmpeg.exe build_bin/
-          cp ffmpeg_src/ffprobe.exe build_bin/
-          cd build_bin
-          7z a -tzip ../ffmpeg-win-x64.zip ffmpeg.exe ffprobe.exe
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ffmpeg-win-x64
-          path: ffmpeg-win-x64.zip
-YAML
-
-echo "   Workflow oluşturuldu."
-
-# ==============================================================================
-# GEÇİCİ WORKFLOW COMMIT
-# ==============================================================================
-
-echo "→ Geçici workflow commit'i oluşturuluyor..."
-
-git -C "$FFMPEG_REPO_DIR" add "$FFMPEG_WORKFLOW"
-
-git -C "$FFMPEG_REPO_DIR" commit \
-    -m "temp: trigger on-the-fly ffmpeg build" \
-    || true
-
-echo "→ Geçici workflow commit'i GitHub'a gönderiliyor..."
-
-git -C "$FFMPEG_REPO_DIR" push \
-    origin \
-    "$FFMPEG_BRANCH"
-
-echo "   ✅ Geçici workflow commit'i gönderildi."
-echo ""
-
-# ==============================================================================
-# CI TETİKLE
-# ==============================================================================
-
-echo "→ GitHub Actions FFmpeg build tetikleniyor..."
-
-# Tetiklemeden önce mevcut son run ID'sini sakla.
-PREVIOUS_RUN_ID="$(
-    gh run list \
-        --repo "$FFMPEG_REPO" \
-        --workflow=build-ffmpeg.yml \
-        --branch "$FFMPEG_BRANCH" \
-        --limit 1 \
-        --json databaseId \
-        --jq '.[0].databaseId // empty' \
-        2>/dev/null || true
-)"
-
-echo "   Önceki run ID: ${PREVIOUS_RUN_ID:-yok}"
-
-gh workflow run build-ffmpeg.yml \
-    --repo "$FFMPEG_REPO" \
-    --ref "$FFMPEG_BRANCH"
-
-echo "   ✅ CI tetiklendi."
-echo ""
-
-# ==============================================================================
-# YENİ RUN ID'SİNİ BUL
-# ==============================================================================
-
-echo "→ Yeni workflow run bekleniyor..."
-
-TRIGGERED_RUN_ID=""
-
-for _ in $(seq 1 30); do
-
-    CURRENT_RUN_ID="$(
-        gh run list \
-            --repo "$FFMPEG_REPO" \
-            --workflow=build-ffmpeg.yml \
-            --branch "$FFMPEG_BRANCH" \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId // empty' \
-            2>/dev/null || true
-    )"
-
-    if [ -n "$CURRENT_RUN_ID" ] \
-        && [ "$CURRENT_RUN_ID" != "$PREVIOUS_RUN_ID" ]; then
-
-        TRIGGERED_RUN_ID="$CURRENT_RUN_ID"
-
-        break
-
-    fi
-
-    sleep 2
-
-done
-
-if [ -z "$TRIGGERED_RUN_ID" ]; then
-
-    echo "❌ Yeni workflow run bulunamadı."
-
+if [ ! -f "$FFMPEG_BUILDER" ]; then
+    echo "❌ FFmpeg builder bulunamadı:"
+    echo "   $FFMPEG_BUILDER"
     exit 1
-
 fi
 
-echo "   ✅ Yeni run ID: $TRIGGERED_RUN_ID"
-echo ""
+"$FFMPEG_BUILDER" \
+    "$STATIC_FFMPEG_BIN"
 
-# ==============================================================================
-# CI BEKLE
-# ==============================================================================
-
-echo "→ Custom FFmpeg derlemesi bekleniyor..."
-
-while true; do
-
-    STATUS_RAW="$(
-        gh run view \
-            "$TRIGGERED_RUN_ID" \
-            --repo "$FFMPEG_REPO" \
-            --json status,conclusion,url \
-            2>/dev/null || true
-    )"
-
-    STATUS="$(
-        printf '%s' "$STATUS_RAW" |
-        "$PORTABLE_PYTHON_EXE" -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("status", ""))
-except Exception:
-    print("")
-'
-    )"
-
-    CONCLUSION="$(
-        printf '%s' "$STATUS_RAW" |
-        "$PORTABLE_PYTHON_EXE" -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("conclusion", ""))
-except Exception:
-    print("")
-'
-    )"
-
-    RUN_URL="$(
-        printf '%s' "$STATUS_RAW" |
-        "$PORTABLE_PYTHON_EXE" -c '
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-    print(data.get("url", ""))
-except Exception:
-    print("")
-'
-    )"
-
-    case "$STATUS" in
-
-        completed)
-
-            if [ "$CONCLUSION" = "success" ]; then
-
-                echo "   ✅ Custom FFmpeg derlemesi tamamlandı."
-
-                break
-
-            fi
-
-            echo ""
-            echo "❌ Custom FFmpeg CI başarısız oldu."
-
-            if [ -n "$RUN_URL" ]; then
-                echo "   $RUN_URL"
-            fi
-
-            echo ""
-            echo "Hata logu:"
-
-            gh run view \
-                "$TRIGGERED_RUN_ID" \
-                --repo "$FFMPEG_REPO" \
-                --log-failed \
-                || true
-
-            exit 1
-            ;;
-
-        in_progress|queued|waiting)
-
-            echo "   → FFmpeg derlemesi devam ediyor..."
-
-            ;;
-
-        *)
-
-            echo "   → CI durumu kontrol ediliyor..."
-
-            ;;
-
-    esac
-
-    sleep 15
-
-done
-
-echo ""
-
-# ==============================================================================
-# 8 — ESKİ CI ÇALIŞMALARINI TEMİZLE
-# ==============================================================================
-
-echo "[8/10] Eski FFmpeg CI çalışmaları temizleniyor..."
-
-OLD_RUN_IDS="$(
-    gh run list \
-        --repo "$FFMPEG_REPO" \
-        --workflow=build-ffmpeg.yml \
-        --limit 100 \
-        --json databaseId \
-        --jq '.[].databaseId' \
-        2>/dev/null |
-    while IFS= read -r RUN_ID; do
-
-        [ -z "$RUN_ID" ] && continue
-
-        if [ "$RUN_ID" != "$TRIGGERED_RUN_ID" ]; then
-            printf '%s\n' "$RUN_ID"
-        fi
-
-    done
-)"
-
-if [ -n "$OLD_RUN_IDS" ]; then
-
-    while IFS= read -r RUN_ID; do
-
-        [ -z "$RUN_ID" ] && continue
-
-        echo "   → Workflow siliniyor: $RUN_ID"
-
-		if gh run delete \
-			"$RUN_ID" \
-			--repo "$FFMPEG_REPO"; then
-
-			echo "      ✅ Silindi."
-
-		else
-
-			echo "      ❌ Silinemedi: $RUN_ID"
-
-		fi
-
-		sleep 0.5
-
-    done <<< "$OLD_RUN_IDS"
-
-else
-
-    echo "   → Silinecek eski workflow bulunamadı."
-
-fi
-
-echo "   ✅ Eski CI çalışmaları temizlendi."
-echo ""
-
-# ==============================================================================
-# 9 — ARTIFACT İNDİR
-# ==============================================================================
-
-echo "[9/10] FFmpeg artifact indiriliyor..."
-
-rm -rf "$FFMPEG_BIN_DIR"
-
-mkdir -p "$FFMPEG_BIN_DIR"
-
-gh run download \
-    "$TRIGGERED_RUN_ID" \
-    --repo "$FFMPEG_REPO" \
-    --name ffmpeg-win-x64 \
-    --dir "$FFMPEG_BIN_DIR"
-
-ZIP_FILE="$(
-    find "$FFMPEG_BIN_DIR" \
-        -maxdepth 1 \
-        -type f \
-        -name "*.zip" |
-    head -n 1
-)"
-
-if [ -z "$ZIP_FILE" ]; then
-
-    echo "❌ FFmpeg artifact ZIP bulunamadı."
-
+if [ ! -f "$STATIC_FFMPEG_BIN/ffmpeg.exe" ]; then
+    echo "❌ Custom ffmpeg.exe bulunamadı."
     exit 1
-
 fi
 
-unzip -o \
-    "$ZIP_FILE" \
-    -d "$FFMPEG_BIN_DIR"
-
-rm -f "$ZIP_FILE"
-
-if [ ! -f "$FFMPEG_BIN_DIR/ffmpeg.exe" ]; then
-
-    echo "❌ ffmpeg.exe bulunamadı."
-
+if [ ! -f "$STATIC_FFMPEG_BIN/ffprobe.exe" ]; then
+    echo "❌ Custom ffprobe.exe bulunamadı."
     exit 1
-
 fi
 
-if [ ! -f "$FFMPEG_BIN_DIR/ffprobe.exe" ]; then
-
-    echo "❌ ffprobe.exe bulunamadı."
-
-    exit 1
-
-fi
-
-echo "   ✅ FFmpeg artifact hazır."
-echo ""
-
-# ==============================================================================
-# CUSTOM FFmpeg → static_ffmpeg
-# ==============================================================================
-
-echo "→ Custom FFmpeg static_ffmpeg içine yerleştiriliyor..."
-
-cp \
-    "$FFMPEG_BIN_DIR/ffmpeg.exe" \
-    "$STATIC_FFMPEG_BIN/"
-
-cp \
-    "$FFMPEG_BIN_DIR/ffprobe.exe" \
-    "$STATIC_FFMPEG_BIN/"
-
-echo "   ✅ Custom FFmpeg yerleştirildi."
-echo ""
-
-# Binary'ler değiştiği için crumb'ı tekrar garanti et.
 touch "$STATIC_FFMPEG_BIN/installed.crumb"
 
-echo "   ✅ installed.crumb mevcut."
+echo "   ✅ Custom FFmpeg hazır."
+echo "   ✅ installed.crumb hazır."
 echo ""
 
 # ==============================================================================
@@ -1061,10 +520,10 @@ echo "   ✅ start.cmd hazır."
 echo ""
 
 # ==============================================================================
-# 10 — SON KONTROLLER
+# 7 — SON KONTROLLER
 # ==============================================================================
 
-echo "[10/10] Portable paket kontrol ediliyor..."
+echo "[7/7] Portable paket kontrol ediliyor..."
 
 if [ ! -f "$DIST_DIR/start.cmd" ]; then
 

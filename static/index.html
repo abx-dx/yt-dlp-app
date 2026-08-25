@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video / Ses / Playlist İndirici</title>
+
+<link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<button id="closeAppBtn" type="button" title="Uygulamayı kapat" aria-label="Uygulamayı kapat">×</button>
+
+<h2>Video / Ses / Playlist İndirici</h2>
+
+<fieldset>
+    <legend>Video / Ses / Playlist Linki</legend>
+    <div class="row">
+        <input type="text" id="urlInput" placeholder="https://...">
+    </div>
+</fieldset>
+
+<fieldset>
+    <legend>İndirme Klasörü</legend>
+    <div class="row">
+        <input type="text" id="folderInput" readonly>
+        <button id="selectFolderBtn" type="button">Klasör Seç</button>
+    </div>
+</fieldset>
+
+<fieldset>
+    <legend>Ayarlar</legend>
+    <div class="row">
+        <div class="inline-field">
+            <label for="profileSelect">Profil:</label>
+            <select id="profileSelect"></select>
+        </div>
+        <div class="inline-field" id="resContainer" style="display: none;">
+            <label for="resSelect">Çözünürlük:</label>
+            <select id="resSelect"></select>
+        </div>
+    </div>
+    <div class="row">
+        <input type="checkbox" id="cookiesCheck">
+        <label for="cookiesCheck">Firefox çerezlerini kullan</label>
+    </div>
+</fieldset>
+
+<fieldset>
+    <legend>İlerleme</legend>
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div id="progressText" style="font-size: 13px;">Henüz indirme yok.</div>
+</fieldset>
+
+<div class="row">
+    <button id="startBtn" type="button">İndirmeyi Başlat</button>
+    <button id="cancelBtn" type="button" disabled style="background:#dc3545;">Durdur</button>
+    <span id="statusText">Hazır.</span>
+</div>
+
+<fieldset style="margin-top: 15px;">
+    <legend>İşlem Günlüğü</legend>
+    <div id="logText"></div>
+</fieldset>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

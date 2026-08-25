@@ -1,0 +1,336 @@
+:root {
+    --bg: #181b20;
+    --panel: #22262d;
+    --panel-border: #3a404a;
+
+    --text: #f1f3f5;
+    --text-muted: #b8bec8;
+
+    --input-bg: #2a2f38;
+    --input-border: #505763;
+
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+
+    --success: #22c55e;
+
+    --danger: #dc3545;
+    --danger-hover: #bb2d3b;
+
+    --disabled: #555b65;
+
+    --log-bg: #15181d;
+    --log-text: #d7f9df;
+
+    --focus-ring: rgba(59, 130, 246, 0.45);
+    --error-ring: rgba(220, 53, 69, 0.9);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    max-width: 1000px;
+    margin: 20px auto;
+    padding: 0 20px;
+    background: var(--bg);
+    color: var(--text);
+}
+
+h1,
+h2,
+h3 {
+    color: var(--text);
+}
+
+fieldset {
+    margin-bottom: 15px;
+    padding: 15px;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    background: var(--panel);
+}
+
+legend {
+    font-weight: bold;
+    padding: 0 6px;
+    color: var(--text);
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.row:last-child {
+    margin-bottom: 0;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background: var(--input-bg);
+    color: var(--text);
+    box-sizing: border-box;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        background-color 0.2s;
+}
+
+input[type="text"]::placeholder {
+    color: var(--text-muted);
+}
+
+input[type="text"]:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+input[readonly] {
+    background: #252a31;
+    color: var(--text-muted);
+}
+
+select {
+    padding: 6px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    min-width: 150px;
+    background-color: var(--input-bg);
+    color: var(--text);
+}
+
+select:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+button {
+    padding: 6px 14px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition:
+        background-color 0.15s,
+        box-shadow 0.15s,
+        opacity 0.15s;
+}
+
+button:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+button:disabled {
+    background: var(--disabled);
+    color: #c4c8ce;
+    cursor: not-allowed;
+}
+
+.progress-bar-container {
+    background: #343941;
+    border-radius: 4px;
+    height: 20px;
+    width: 100%;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.progress-bar {
+    background: var(--success);
+    height: 100%;
+    width: 0%;
+    transition: width 0.2s;
+}
+
+#progressText {
+    color: var(--text-muted);
+}
+
+#logText {
+    width: 100%;
+    height: 220px;
+    background: var(--log-bg);
+    color: var(--log-text);
+    font-family: "Consolas", monospace;
+    font-size: 13px;
+    border: 1px solid #30353d;
+    border-radius: 4px;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow-y: scroll;
+    white-space: pre-wrap;
+}
+
+.inline-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.inline-field label,
+.row label {
+    color: var(--text-muted);
+}
+
+#folderInput {
+    flex: 1;
+    min-width: 0;
+}
+
+#statusText {
+    font-weight: bold;
+    margin-left: 10px;
+    color: var(--text-muted);
+}
+
+#closeAppBtn {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 9999;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+#closeAppBtn:hover:not(:disabled) {
+    background: var(--danger-hover);
+    opacity: 1;
+}
+
+#closeAppBtn:disabled {
+    background: #666b73;
+    cursor: wait;
+}
+
+body.app-closing {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.input-error {
+    border: 2px solid var(--danger) !important;
+    animation: fieldErrorFlash 0.35s ease-in-out 0s 4;
+}
+
+@keyframes fieldErrorFlash {
+    0%, 100% {
+        box-shadow: 0 0 0 rgba(220, 53, 69, 0);
+    }
+
+    50% {
+        box-shadow: 0 0 10px var(--error-ring);
+    }
+}
+
+/* --- Görsel polish --- */
+
+h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+
+fieldset {
+    margin-bottom: 18px;
+    padding: 16px;
+}
+
+legend {
+    color: var(--text);
+    font-size: 14px;
+}
+
+.row {
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+/* Kontrollerin ortak yüksekliği */
+input[type="text"],
+select,
+button {
+    min-height: 36px;
+}
+
+input[type="text"] {
+    font-size: 14px;
+}
+
+select {
+    font-size: 14px;
+}
+
+/* Checkbox'ın karanlık temada daha düzgün görünmesi */
+input[type="checkbox"] {
+    accent-color: var(--primary);
+}
+
+/* Başlat butonunu biraz daha belirgin yap */
+#startBtn {
+    font-weight: 600;
+}
+
+/* Durdur butonu */
+#cancelBtn {
+    background: var(--danger) !important;
+}
+
+#cancelBtn:hover:not(:disabled) {
+    background: var(--danger-hover) !important;
+}
+
+/* Durum metnini panelden ayır */
+#statusText {
+    white-space: nowrap;
+}
+
+/* Log scrollbar */
+#logText {
+    scrollbar-width: thin;
+    scrollbar-color: #4b525c var(--log-bg);
+}
+
+#logText::-webkit-scrollbar {
+    width: 10px;
+}
+
+#logText::-webkit-scrollbar-track {
+    background: var(--log-bg);
+}
+
+#logText::-webkit-scrollbar-thumb {
+    background: #4b525c;
+    border-radius: 5px;
+}
+
+#logText::-webkit-scrollbar-thumb:hover {
+    background: #626a76;
+}

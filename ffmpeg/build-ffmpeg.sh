@@ -12,14 +12,11 @@ set -Eeuo pipefail
 FFMPEG_OUTPUT_DIR="${1:-}"
 
 if [ -z "$FFMPEG_OUTPUT_DIR" ]; then
-
     echo "❌ FFmpeg çıktı dizini belirtilmedi."
     echo ""
     echo "Kullanım:"
     echo "   build-ffmpeg.sh <output-dir>"
-
     exit 1
-
 fi
 
 mkdir -p "$FFMPEG_OUTPUT_DIR"
@@ -37,21 +34,18 @@ FFMPEG_BIN_DIR="$SCRIPT_DIR/build_bin"
 # ==============================================================================
 
 REPO="abx-dx/yt-dlp-app"
-BRANCH="build-infra"
-
 WORKFLOW="build-ffmpeg.yml"
+BRANCH="yt-dlp-core"
 ARTIFACT_NAME="ffmpeg-win-x64"
 
-TRIGGERED_RUN_ID=""
+RUN_ID=""
 
 # ==============================================================================
 # TEMİZLİK
 # ==============================================================================
 
 cleanup() {
-
     rm -rf "$FFMPEG_BIN_DIR"
-
 }
 
 trap cleanup EXIT
@@ -64,8 +58,8 @@ echo "========================================================"
 echo "🚀 CUSTOM FFMPEG BUILD"
 echo "========================================================"
 echo "Repository : $REPO"
-echo "Branch     : $BRANCH"
 echo "Workflow   : $WORKFLOW"
+echo "Branch     : $BRANCH"
 echo "Output     : $FFMPEG_OUTPUT_DIR"
 echo "========================================================"
 echo ""
@@ -77,19 +71,13 @@ echo ""
 echo "→ Ortam kontrol ediliyor..."
 
 if ! command -v gh >/dev/null 2>&1; then
-
     echo "❌ GitHub CLI (gh) bulunamadı."
-
     exit 1
-
 fi
 
 if ! command -v unzip >/dev/null 2>&1; then
-
     echo "❌ unzip bulunamadı."
-
     exit 1
-
 fi
 
 echo "   ✅ GitHub CLI hazır."
@@ -97,11 +85,10 @@ echo "   ✅ unzip hazır."
 echo ""
 
 # ==============================================================================
-# ARTIFACT ÇALIŞMA ALANI
+# ÇALIŞMA ALANI
 # ==============================================================================
 
 rm -rf "$FFMPEG_BIN_DIR"
-
 mkdir -p "$FFMPEG_BIN_DIR"
 
 # ==============================================================================
@@ -144,7 +131,7 @@ echo ""
 
 echo "→ Yeni workflow run bekleniyor..."
 
-TRIGGERED_RUN_ID=""
+RUN_ID=""
 
 for _ in $(seq 1 30); do
 
@@ -153,6 +140,7 @@ for _ in $(seq 1 30); do
             --repo "$REPO" \
             --workflow="$WORKFLOW" \
             --branch "$BRANCH" \
+            --event workflow_dispatch \
             --limit 1 \
             --json databaseId \
             --jq '.[0].databaseId // empty' \
@@ -162,25 +150,19 @@ for _ in $(seq 1 30); do
     if [ -n "$CURRENT_RUN_ID" ] \
         && [ "$CURRENT_RUN_ID" != "$PREVIOUS_RUN_ID" ]; then
 
-        TRIGGERED_RUN_ID="$CURRENT_RUN_ID"
-
+        RUN_ID="$CURRENT_RUN_ID"
         break
-
     fi
 
     sleep 2
-
 done
 
-if [ -z "$TRIGGERED_RUN_ID" ]; then
-
+if [ -z "$RUN_ID" ]; then
     echo "❌ Yeni workflow run bulunamadı."
-
     exit 1
-
 fi
 
-echo "   ✅ Yeni run ID: $TRIGGERED_RUN_ID"
+echo "   ✅ Yeni run ID: $RUN_ID"
 echo ""
 
 # ==============================================================================
@@ -190,7 +172,7 @@ echo ""
 echo "→ Custom FFmpeg derlemesi bekleniyor..."
 
 if ! gh run watch \
-    "$TRIGGERED_RUN_ID" \
+    "$RUN_ID" \
     --repo "$REPO" \
     --exit-status; then
 
@@ -200,13 +182,12 @@ if ! gh run watch \
     echo "Hata logu:"
 
     gh run view \
-        "$TRIGGERED_RUN_ID" \
+        "$RUN_ID" \
         --repo "$REPO" \
         --log-failed \
         || true
 
     exit 1
-
 fi
 
 echo ""
@@ -220,7 +201,7 @@ echo ""
 echo "→ FFmpeg artifact indiriliyor..."
 
 gh run download \
-    "$TRIGGERED_RUN_ID" \
+    "$RUN_ID" \
     --repo "$REPO" \
     --name "$ARTIFACT_NAME" \
     --dir "$FFMPEG_BIN_DIR"
@@ -234,12 +215,15 @@ ZIP_FILE="$(
 )"
 
 if [ -z "$ZIP_FILE" ]; then
-
     echo "❌ FFmpeg artifact ZIP bulunamadı."
-
     exit 1
-
 fi
+
+# ==============================================================================
+# ARTIFACT AÇ
+# ==============================================================================
+
+echo "→ Artifact açılıyor..."
 
 unzip -o \
     "$ZIP_FILE" \
@@ -248,23 +232,17 @@ unzip -o \
 rm -f "$ZIP_FILE"
 
 # ==============================================================================
-# ARTIFACT KONTROLÜ
+# KONTROL
 # ==============================================================================
 
 if [ ! -f "$FFMPEG_BIN_DIR/ffmpeg.exe" ]; then
-
     echo "❌ ffmpeg.exe bulunamadı."
-
     exit 1
-
 fi
 
 if [ ! -f "$FFMPEG_BIN_DIR/ffprobe.exe" ]; then
-
     echo "❌ ffprobe.exe bulunamadı."
-
     exit 1
-
 fi
 
 echo "   ✅ Artifact hazır."
@@ -289,19 +267,13 @@ cp \
 # ==============================================================================
 
 if [ ! -f "$FFMPEG_OUTPUT_DIR/ffmpeg.exe" ]; then
-
     echo "❌ ffmpeg.exe çıktı dizinine kopyalanamadı."
-
     exit 1
-
 fi
 
 if [ ! -f "$FFMPEG_OUTPUT_DIR/ffprobe.exe" ]; then
-
     echo "❌ ffprobe.exe çıktı dizinine kopyalanamadı."
-
     exit 1
-
 fi
 
 echo ""
@@ -310,5 +282,5 @@ echo "🎉 CUSTOM FFMPEG HAZIR"
 echo "========================================================"
 echo "FFmpeg : $FFMPEG_OUTPUT_DIR/ffmpeg.exe"
 echo "FFprobe: $FFMPEG_OUTPUT_DIR/ffprobe.exe"
-echo "Run ID : $TRIGGERED_RUN_ID"
+echo "Run ID : $RUN_ID"
 echo "========================================================"

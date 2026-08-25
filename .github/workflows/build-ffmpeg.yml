@@ -1,6 +1,7 @@
 name: Custom FFmpeg Build
 
 on:
+  workflow_call:
   workflow_dispatch:
 
 jobs:

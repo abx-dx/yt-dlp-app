@@ -133,7 +133,7 @@ cleanup() {
         echo "$DISP_OUTPUT"
         echo "========================================================"
 
-        if command -v explorer.exe >/dev/null 2>&1; then
+        if [ -z "${CI:-}" ] && command -v explorer.exe >/dev/null 2>&1; then
 
             explorer.exe \
                 "$(cygpath -w "$DIST_DIR" 2>/dev/null || echo "$DIST_DIR")"

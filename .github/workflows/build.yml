@@ -1,0 +1,61 @@
+name: yt-dlp-web Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - yt-dlp-web
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Checkout yt-dlp-web
+        uses: actions/checkout@v4
+        with:
+          path: projects/yt-dlp-web
+
+      - name: Checkout yt-dlp-core
+        uses: actions/checkout@v4
+        with:
+          repository: abx-dx/yt-dlp-app
+          ref: yt-dlp-core
+          path: projects/yt-dlp-core
+
+      - name: Checkout yt-dlp-build-infra
+        uses: actions/checkout@v4
+        with:
+          repository: abx-dx/yt-dlp-app
+          ref: build-infra
+          path: projects/yt-dlp-build-infra
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Create development venv
+        shell: bash
+        run: |
+          python -m venv apps/python/venv
+
+      - name: Build portable package
+        shell: bash
+        working-directory: projects/yt-dlp-web
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./build.sh
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-web-portable
+          path: projects/yt-dlp-web/dist/
+          if-no-files-found: error

@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Iterator
+
+from yt_dlp import YoutubeDL
 
 import psutil
 
 from .command import build_command
 from .parser import Event, OutputParser
 from .profiles import Profile
+from .resolver import resolve_music_url
 from .tools import Tools, get_subprocess_args
 
 
@@ -27,27 +31,28 @@ class YtDlpRunner:
         self.profile = profile
         self.url = url
 
-        # Kullanıcının seçtiği nihai hedef klasör
         self.final_output_dir = output_dir
 
-        # Portable geçici indirme klasörü
-        self.temp_dir = Path(self.tools.app_dir) / ".tmp_downloads"
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir = (
+            Path(self.tools.app_dir) / ".tmp_downloads"
+        )
+        self.temp_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         self.use_cookies = use_cookies
         self.max_resolution = max_resolution
 
         self.process: subprocess.Popen[str] | None = None
 
-        # Durdurma bayrağı
         self.is_stopped = False
 
     def _clear_temp_dir(self) -> None:
-        """
-        Yeni indirme başlamadan önce .tmp_downloads içeriğini temizler.
-        Klasörün kendisi korunur.
-        """
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
         for item in list(self.temp_dir.iterdir()):
             try:
@@ -57,12 +62,13 @@ class YtDlpRunner:
                     item.unlink()
 
                 print(
-                    f"[Portable System] Geçici içerik temizlendi: {item}"
+                    "[Portable System] "
+                    f"Geçici içerik temizlendi: {item}"
                 )
 
             except Exception as exc:
                 print(
-                    f"[Hata] Geçici içerik temizlenemedi: "
+                    "[Hata] Geçici içerik temizlenemedi: "
                     f"{item} -> {exc}"
                 )
 
@@ -76,20 +82,39 @@ class YtDlpRunner:
                 "Geçerli bir indirme klasörü seçilmedi."
             )
 
-        # Her yeni indirme başlamadan önce eski geçici içerikleri temizle.    
-
         self._clear_temp_dir()
 
         self.is_stopped = False
 
+        url = self.url
+
+        if (
+            self.profile.name == "audio"
+            and not self.profile.playlist
+        ):
+            url = resolve_music_url(url)
+
         cmd = build_command(
             tools=self.tools,
             profile=self.profile,
-            url=self.url,
+            url=url,
             output_dir=str(self.temp_dir),
             use_cookies=self.use_cookies,
             max_resolution=self.max_resolution,
         )
+
+        print("\n========== YT-DLP CMD ==========")
+        print(cmd)
+        print("================================\n")
+
+        env = self.tools.env()
+
+        print("\n========== SUBPROCESS DEBUG ==========")
+        print("PYTHON   :", self.tools.python_exec)
+        print("APP_DIR  :", self.tools.app_dir)
+        print("DENO     :", self.tools.deno)
+        print("PATH     :", env.get("PATH"))
+        print("======================================\n")
 
         self.process = subprocess.Popen(
             cmd,
@@ -101,26 +126,26 @@ class YtDlpRunner:
             errors="replace",
             bufsize=1,
             cwd=self.tools.app_dir,
-            env=self.tools.env(),
+            env=env,
             **get_subprocess_args(),
         )
-
 
         return self.process
 
     def stop(self) -> None:
-        """
-        Süreci ve tüm çocuk süreçlerini anında sonlandırır.
-        """
-
         self.is_stopped = True
 
         if not self.process:
             return
-        try:
-            parent = psutil.Process(self.process.pid)
 
-            children = parent.children(recursive=True)
+        try:
+            parent = psutil.Process(
+                self.process.pid
+            )
+
+            children = parent.children(
+                recursive=True
+            )
 
             for child in children:
                 try:
@@ -140,13 +165,16 @@ class YtDlpRunner:
                 pass
 
     def lines(self) -> Iterator[str]:
-        if self.process is None or self.process.stdout is None:
-            raise RuntimeError("Süreç henüz başlatılmadı.")
+        if (
+            self.process is None
+            or self.process.stdout is None
+        ):
+            raise RuntimeError(
+                "Süreç henüz başlatılmadı."
+            )
 
         for line in self.process.stdout:
-            cleaned_line = line.strip()
-
-            yield cleaned_line
+            yield line.strip()
 
     def wait(self) -> int:
         if self.process is None:
@@ -154,16 +182,16 @@ class YtDlpRunner:
 
         exit_code = self.process.wait()
 
-        # Süreç tamamen bittiğinde boş geçici klasörleri temizle.
         if self.temp_dir.exists():
             try:
                 for subfolder in self.temp_dir.iterdir():
                     if (
                         subfolder.is_dir()
-                        and not any(subfolder.iterdir())
+                        and not any(
+                            subfolder.iterdir()
+                        )
                     ):
                         subfolder.rmdir()
-
             except Exception:
                 pass
 
@@ -171,7 +199,9 @@ class YtDlpRunner:
 
     def events(self) -> Iterator[Event]:
         if self.process is None:
-            raise RuntimeError("Process başlatılmadı.")
+            raise RuntimeError(
+                "Process başlatılmadı."
+            )
 
         parser = OutputParser(
             self.profile.name,
@@ -181,10 +211,16 @@ class YtDlpRunner:
         stdout = self.process.stdout
 
         if stdout is None:
-            raise RuntimeError("stdout bulunamadı.")
+            raise RuntimeError(
+                "stdout bulunamadı."
+            )
 
         for line in stdout:
-            # Durdurma mümkün olan en erken noktada yakalanır.
+            print(
+                "[RAW YT-DLP] "
+                + line.rstrip()
+            )
+
             if self.is_stopped:
                 break
 
@@ -193,7 +229,6 @@ class YtDlpRunner:
             if self.is_stopped:
                 break
 
-            # Dosya tamamlandığında nihai klasöre aktar.
             if (
                 "FILE_DONE|" in cleaned_line
                 and self.final_output_dir
@@ -203,7 +238,9 @@ class YtDlpRunner:
 
                 try:
                     parts = cleaned_line.split("|")
-                    downloaded_file_path = Path(parts[-1])
+                    downloaded_file_path = Path(
+                        parts[-1]
+                    )
 
                     if downloaded_file_path.exists():
                         target_dir = Path(
@@ -232,17 +269,18 @@ class YtDlpRunner:
 
                         shutil.move(
                             str(downloaded_file_path),
-                            str(target_file_path),
+                            str(target_file_path)
                         )
-                        
-                        # MetadataParser/metadata.py artık dosyanın
-                        # nihai konumunu kullanabilsin.
-                        parts[-1] = str(target_file_path)
+
+                        parts[-1] = str(
+                            target_file_path
+                        )
+
                         cleaned_line = "|".join(parts)
 
                         print(
                             "[Portable System] "
-                            f"Dosya başarıyla aktarıldı: "
+                            "Dosya başarıyla aktarıldı: "
                             f"{target_file_path}"
                         )
 
@@ -269,3 +307,50 @@ class YtDlpRunner:
                     break
 
                 yield event
+
+
+class ResolverYoutubeDL(YoutubeDL):
+
+    def process_ie_result(
+        self,
+        ie_result,
+        download=True,
+        extra_info=None,
+    ):
+        if (
+            isinstance(ie_result, dict)
+            and ie_result.get("_type") == "url"
+        ):
+            url = ie_result.get("url")
+
+            if (
+                isinstance(url, str)
+                and "music.youtube.com/watch" in url
+            ):
+                ie_result = ie_result.copy()
+                ie_result["url"] = resolve_music_url(
+                    url,
+                    self,
+                )
+
+        return super().process_ie_result(
+            ie_result,
+            download=download,
+            extra_info=extra_info,
+        )
+
+
+def _run_yt_dlp_with_resolver() -> int:
+    from yt_dlp import parse_options
+
+    parsed = parse_options(sys.argv[1:])
+
+    params = parsed.ydl_opts
+
+    ydl = ResolverYoutubeDL(params)
+
+    return ydl.download(parsed.urls)
+
+
+if __name__ == "__main__":
+    _run_yt_dlp_with_resolver()

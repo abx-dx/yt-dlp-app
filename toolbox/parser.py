@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+
 from .metadata import format_file_done_report
+
 
 DOWNLOAD_PERCENT_RE = re.compile(
     r"^\[download\]\s+(\d+(?:\.\d+)?)%\s+of.*?at\s+(.+?)\s+ETA\s+(.+)$"
@@ -13,10 +15,6 @@ DOWNLOAD_PERCENT_RE = re.compile(
 
 PLAYLIST_COUNTER_RE = re.compile(
     r"^\[download\]\s+Downloading (?:item|video)\s+(\d+)\s+of\s+(\d+)"
-)
-
-DESTINATION_RE = re.compile(
-    r"^\[(?:download|ExtractAudio|ffmpeg)\]\s+Destination:\s+(.+)$"
 )
 
 FILE_DONE_RE = re.compile(
@@ -51,11 +49,6 @@ class PlaylistEvent(Event):
 
 
 @dataclass(slots=True)
-class DestinationEvent(Event):
-    path: Path
-
-
-@dataclass(slots=True)
 class FileDoneEvent(Event):
     video_id: str
     format_id: str
@@ -84,11 +77,13 @@ class ErrorEvent(Event):
 
 class OutputParser:
 
-    def __init__(self, profile_name: str, max_resolution: str | None = None):
+    def __init__(
+        self,
+        profile_name: str,
+        max_resolution: str | None = None,
+    ):
         self.profile_name = profile_name
-        self.max_resolution = max_resolution  # <-- Yeni
-        self.current_file: Path | None = None
-
+        self.max_resolution = max_resolution
 
     def parse(self, line: str) -> Event | None:
 
@@ -110,10 +105,6 @@ class OutputParser:
                 total=int(m.group(2)),
             )
 
-        if m := DESTINATION_RE.match(line):
-            self.current_file = Path(m.group(1))
-            return DestinationEvent(self.current_file)
-
         if m := FILE_DONE_RE.match(line):
             path = Path(m.group(8))
 
@@ -127,9 +118,9 @@ class OutputParser:
                 abr=m.group(7),
                 file_path=path,
                 report=format_file_done_report(
-                    self.profile_name, 
-                    line, 
-                    self.max_resolution  # <-- Yeni
+                    self.profile_name,
+                    line,
+                    self.max_resolution,
                 ),
             )
 

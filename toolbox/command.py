@@ -7,7 +7,6 @@ import static_ffmpeg
 static_ffmpeg.add_paths()
 
 from .cookies import cookie_args
-from .output import build_output
 from .playlist import resolve_profile
 from .profiles import Profile, build_video_format
 from .tools import Tools
@@ -40,13 +39,12 @@ def build_command(
     output_dir: str | None = None,
     use_cookies: bool = False,
     max_resolution: str | None = None,
-    final_output_dir: str | None = None,
 ) -> list[str]:
 
     cmd = [
         sys.executable,
         "-m",
-        "yt_dlp",
+        "toolbox.runner",
     ]
 
     # --------------------------------------------------------------
@@ -92,14 +90,6 @@ def build_command(
         ]
     )
 
-    # --------------------------------------------------------------
-    # Playlist
-    # --------------------------------------------------------------
-
-    if profile.playlist:
-        cmd.append(
-            "--yes-playlist"
-        )
 
     # --------------------------------------------------------------
     # Format

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from .profiles import DOWNLOAD_DIR, Profile
 from .output import build_output
 from .playlist_info import (
     PlaylistInfo,
     get_playlist_info,
 )
 from .tools import Tools
+from .profiles import Profile
 
 
 def resolve_profile(
@@ -43,10 +43,11 @@ def resolve_album(
     output_dir: str | None,
 ) -> tuple[str, list[str]]:
 
-    base = DOWNLOAD_DIR
-
-    if output_dir:
-        base = output_dir.replace("\\", "/")
+    base = (
+        output_dir.replace("\\", "/")
+        if output_dir
+        else "."
+    )
 
     output = (
         f"{base}/"
@@ -61,16 +62,11 @@ def resolve_album(
         "--parse-metadata",
         f"{info.playlist_count}:%(meta_tracktotal)s",
 
-        # meta_date mevcut davranışını korur.
         "--parse-metadata",
         "%(release_year,release_date,upload_date)s:%(meta_date)s",
     ]
 
-    # YT Music albüm yılı varsa birincil kaynak.
-    #
-    # Yoksa bu argümanı eklemiyoruz ve profiles.py'deki
-    # mevcut release_year -> upload_year fallback'i çalışıyor.
-    if info.release_year is not None:
+    if info.release_year:
         args.extend(
             [
                 "--parse-metadata",
@@ -91,9 +87,6 @@ def resolve_playlist(
         output_dir,
     )
 
-    # Normal playlistte mevcut davranışı koruyoruz.
-    # Entry-başına YT Music yıl çözümlemesi ayrı katmanda
-    # yapılacak; burada mevcut fallback kaldırılmıyor.
     args = [
         "--parse-metadata",
         "%(release_year,release_date,upload_date)s:%(meta_date)s",

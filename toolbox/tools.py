@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import sysconfig
 from pathlib import Path
 
 def get_subprocess_args():
@@ -54,8 +55,8 @@ class Tools:
         # 2. Deno Tespiti
         # Aktif Python runtime ile aynı dizindeki Deno
         # öncelikli olarak kullanılır.
-        python_dir = Path(python_exec).parent
-        deno_exe = python_dir / (
+        scripts_dir = Path(sysconfig.get_path("scripts"))
+        deno_exe = scripts_dir / (
             "deno.exe"
             if sys.platform == "win32"
             else "deno"

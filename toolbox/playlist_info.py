@@ -15,7 +15,8 @@ class PlaylistInfo:
     playlist_title: str = ""
     album: str = ""
     artist: str = ""
-    release_year: str = ""  # release_year alani eklendi
+    release_year: str = ""
+    entries: list[dict] | None = None
 
 
 def get_playlist_info(
@@ -27,10 +28,14 @@ def get_playlist_info(
     cmd = [
         *tools.yt_dlp_cmd,
         "--dump-single-json",
-        "--playlist-items", "1",
+        "--playlist-items",
+        "1",
     ]
 
-    cmd.extend(cookie_args(use_cookies))
+    cmd.extend(
+        cookie_args(use_cookies)
+    )
+
     cmd.append(url)
 
     result = subprocess.run(
@@ -50,14 +55,28 @@ def get_playlist_info(
     except json.JSONDecodeError:
         return PlaylistInfo()
 
+    if not data:
+        return PlaylistInfo()
+
     title = data.get("title") or ""
 
-    entries = data.get("entries") or []
-    first = entries[0] if entries else {}
+    entries = [
+        entry
+        for entry in (data.get("entries") or [])
+        if entry
+    ]
+
+    first = entries[0] if entries else data
 
     raw_album = first.get("album") or ""
+
     if not raw_album and title.startswith("Album - "):
-        raw_album = title.replace("Album - ", "", 1)
+        raw_album = title.replace(
+            "Album - ",
+            "",
+            1,
+        )
+
     if not raw_album:
         raw_album = title or "Bilinmeyen Album"
 
@@ -69,14 +88,21 @@ def get_playlist_info(
         or "Bilinmeyen Sanatci"
     )
 
-    # Doğrudan release_year bilgisini alıyoruz
-    release_year = first.get("release_year") or data.get("release_year") or ""
+    release_year = (
+        first.get("release_year")
+        or data.get("release_year")
+        or ""
+    )
 
     return PlaylistInfo(
         is_album=title.startswith("Album - "),
-        playlist_count=data.get("playlist_count") or len(entries),
+        playlist_count=(
+            data.get("playlist_count")
+            or len(entries)
+        ),
         playlist_title=title,
         album=raw_album,
         artist=artist,
         release_year=str(release_year),
+        entries=entries,
     )

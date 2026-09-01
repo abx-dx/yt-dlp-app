@@ -3,9 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-DOWNLOAD_DIR = "./indirilenler"
-
-
 @dataclass(frozen=True, slots=True)
 class Profile:
     name: str
@@ -68,7 +65,7 @@ PROFILES: dict[str, Profile] = {
     "video": Profile(
         name="video",
         format=build_video_format(),
-        output=f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        output="%(title)s.%(ext)s",
         args=[
             "--merge-output-format",
             "mkv",
@@ -89,10 +86,7 @@ PROFILES: dict[str, Profile] = {
     "audio": Profile(
         name="audio",
         format="bestaudio[acodec=opus]/bestaudio",
-        output=(
-            f"{DOWNLOAD_DIR}/"
-            "%(artist,uploader)s - %(title)s.%(ext)s"
-        ),
+        output="%(artist,uploader)s - %(title)s.%(ext)s",
         args=[
             "-x",
 
@@ -120,7 +114,6 @@ PROFILES: dict[str, Profile] = {
         format="bestaudio[acodec=opus]/bestaudio",
         playlist=True,
         output=(
-            f"{DOWNLOAD_DIR}/"
             "%(playlist_title)s/"
             "%(playlist_index)s - %(title)s.%(ext)s"
         ),

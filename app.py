@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
+import os
 import subprocess
 import sys
 import threading
@@ -80,6 +80,21 @@ app = FastAPI(
     title=APP_NAME
 )
 
+
+@app.middleware("http")
+async def disable_cache(request, call_next):
+
+    response = await call_next(request)
+
+    response.headers["Cache-Control"] = (
+        "no-store, no-cache, must-revalidate, max-age=0"
+    )
+
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    return response
+
 STATIC_DIR = WEB_DIR / "static"
 
 app.mount(
@@ -101,10 +116,12 @@ app_state = {
 def set_active_runner(
     runner: YtDlpRunner | None
 ) -> None:
+
     app_state["active_runner"] = runner
 
 
 def get_active_runner():
+
     return app_state.get(
         "active_runner"
     )
@@ -113,6 +130,7 @@ def get_active_runner():
 def clear_active_runner(
     runner=None
 ) -> None:
+
     current = get_active_runner()
 
     if (
@@ -123,71 +141,11 @@ def clear_active_runner(
 
 
 # ---------------------------------------------------------
-# TMP Klasör Temizleme
-# ---------------------------------------------------------
-
-def clear_tmp_downloads(
-    tools: Tools
-) -> None:
-    """
-    .tmp_downloads klasörünü korur,
-    içindeki tüm dosya ve klasörleri siler.
-    """
-    tmp_dir = Path(
-        tools.app_dir
-    ) / ".tmp_downloads"
-
-    try:
-        tmp_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        for item in tmp_dir.iterdir():
-
-            try:
-                if item.is_dir():
-                    shutil.rmtree(
-                        item,
-                        ignore_errors=True
-                    )
-                else:
-                    item.unlink(
-                        missing_ok=True
-                    )
-
-            except Exception as exc:
-                print(
-                    "[TMP] Silinemedi: "
-                    f"{item} -> {exc}"
-                )
-
-        print(
-            "[TMP] .tmp_downloads içeriği temizlendi."
-        )
-
-    except Exception as exc:
-        print(
-            "[TMP] Temizleme hatası: "
-            f"{exc}"
-        )
-
-
-# ---------------------------------------------------------
 # Klasör Seçimi
 # ---------------------------------------------------------
 
 @app.get("/api/select-folder")
 async def select_folder():
-    """
-    İşletim sisteminin native klasör seçim penceresini açar.
-
-    Kullanıcı klasör seçerse:
-        {"path": "...", "cancelled": false}
-
-    İptal ederse:
-        {"path": "", "cancelled": true}
-    """
 
     try:
         import tkinter as tk
@@ -221,9 +179,11 @@ async def select_folder():
         }
 
     except Exception as exc:
+
         print(
             "[FOLDER] Klasör seçim hatası: "
-            f"{exc}"
+            f"{exc}",
+            flush=True,
         )
 
         return {
@@ -243,9 +203,11 @@ async def stop_download():
     runner = get_active_runner()
 
     if runner is None:
+
         print(
             "[API] Durdurma isteği geldi "
-            "ancak aktif runner yok."
+            "ancak aktif runner yok.",
+            flush=True,
         )
 
         return {
@@ -256,10 +218,12 @@ async def stop_download():
         }
 
     print(
-        "[API] Durdurma isteği alındı."
+        "[API] Durdurma isteği alındı.",
+        flush=True,
     )
 
     try:
+
         runner.stop()
 
         return {
@@ -273,7 +237,8 @@ async def stop_download():
 
         print(
             "[API] Runner durdurma hatası: "
-            f"{exc}"
+            f"{exc}",
+            flush=True,
         )
 
         return {
@@ -288,6 +253,7 @@ async def stop_download():
 
 @app.get("/")
 async def index():
+
     return FileResponse(
         STATIC_DIR / "index.html"
     )
@@ -299,6 +265,7 @@ async def index():
 
 @app.get("/api/options")
 async def get_options():
+
     return {
         "profiles": PROFILE_OPTIONS,
         "resolutions": RESOLUTIONS,
@@ -317,12 +284,18 @@ async def stream_download(
     use_firefox_cookies: bool = Query(False),
     output_dir: str = Query(...),
 ):
+
     async def event_stream():
 
         tools = Tools.discover()
 
         try:
-            out_dir = Path(output_dir).expanduser().resolve()
+
+            out_dir = (
+                Path(output_dir)
+                .expanduser()
+                .resolve()
+            )
 
             if not out_dir.exists():
                 raise ValueError(
@@ -354,14 +327,9 @@ async def stream_download(
 
             return
 
-        # Her yeni indirme başlamadan önce
-        # geçici klasörün içini temizle.
-        clear_tmp_downloads(tools)
-
         profile = get_profile(
             profile_key
         )
-
 
         if use_firefox_cookies:
 
@@ -410,261 +378,16 @@ async def stream_download(
         set_active_runner(runner)
 
         try:
-            runner.start()
 
-        except Exception as exc:
+            try:
 
-            clear_active_runner(
-                runner
-            )
+                runner.start()
 
-            yield (
-                "data: "
-                + json.dumps(
-                    {
-                        "type": "error",
-                        "text": (
-                            "yt-dlp başlatılamadı: "
-                            f"{exc}"
-                        ),
-                    },
-                    ensure_ascii=False
+            except Exception as exc:
+
+                clear_active_runner(
+                    runner
                 )
-                + "\n\n"
-            )
-
-            return
-
-        current_playlist = ""
-
-        try:
-
-            for event in runner.events():
-
-                payload = {}
-
-                if isinstance(
-                    event,
-                    PlaylistEvent
-                ):
-
-                    current_playlist = (
-                        f"Video "
-                        f"{event.current}/"
-                        f"{event.total}"
-                    )
-
-                    payload = {
-                        "type": "playlist",
-                        "counter": (
-                            current_playlist
-                        ),
-                        "text": (
-                            f"{current_playlist} | "
-                            "Video hazırlanıyor..."
-                        ),
-                    }
-
-                elif isinstance(
-                    event,
-                    ProgressEvent
-                ):
-
-                    speed = (
-                        getattr(
-                            event,
-                            "speed",
-                            ""
-                        )
-                        or "?"
-                    )
-
-                    eta = (
-                        getattr(
-                            event,
-                            "eta",
-                            ""
-                        )
-                        or "?"
-                    )
-
-                    prefix = (
-                        f"{current_playlist} | "
-                        if current_playlist
-                        else ""
-                    )
-
-                    payload = {
-                        "type": "progress",
-                        "percent": max(
-                            0.0,
-                            min(
-                                100.0,
-                                event.percent
-                            ),
-                        ),
-                        "text": (
-                            f"{prefix}"
-                            f"{event.percent:.1f}% | "
-                            f"{speed} | ETA {eta}"
-                        ),
-                    }
-
-                elif isinstance(
-                    event,
-                    FileDoneEvent
-                ):
-
-                    prefix = (
-                        f"{current_playlist} | "
-                        if current_playlist
-                        else ""
-                    )
-
-                    yield (
-                        "data: "
-                        + json.dumps(
-                            {
-                                "type": "log",
-                                "text": "",
-                            },
-                            ensure_ascii=False
-                        )
-                        + "\n\n"
-                    )
-
-                    yield (
-                        "data: "
-                        + json.dumps(
-                            {
-                                "type": "log",
-                                "text": event.report,
-                            },
-                            ensure_ascii=False
-                        )
-                        + "\n\n"
-                    )
-
-                    yield (
-                        "data: "
-                        + json.dumps(
-                            {
-                                "type": "log",
-                                "text": (
-                                    "İndirme tamamlandı: "
-                                    f"{event.file_name}"
-                                ),
-                            },
-                            ensure_ascii=False
-                        )
-                        + "\n\n"
-                    )
-
-                    payload = {
-                        "type": "file_done",
-                        "percent": 100.0,
-                        "text": (
-                            f"{prefix}"
-                            f"Tamamlandı: "
-                            f"{event.file_name}"
-                        ),
-                    }
-
-                elif isinstance(
-                    event,
-                    WarningEvent
-                ):
-
-                    payload = {
-                        "type": "warning",
-                        "text": event.text,
-                    }
-
-                elif isinstance(
-                    event,
-                    ErrorEvent
-                ):
-
-                    payload = {
-                        "type": "error",
-                        "text": event.text,
-                    }
-
-                if payload:
-                    yield (
-                        "data: "
-                        + json.dumps(
-                            payload,
-                            ensure_ascii=False
-                        )
-                        + "\n\n"
-                    )
-
-                await asyncio.sleep(
-                    0.01
-                )
-
-            return_code = runner.wait()
-
-            if runner.is_stopped:
-
-                yield (
-                    "data: "
-                    + json.dumps(
-                        {
-                            "type": "stopped",
-                            "text": (
-                                "İndirme kullanıcı "
-                                "tarafından durduruldu."
-                            ),
-                        },
-                        ensure_ascii=False
-                    )
-                    + "\n\n"
-                )
-
-            elif return_code == 0:
-
-                message = (
-                    "Tüm playlist başarıyla "
-                    "indirildi ve raporlandı."
-                    if profile_key == "playlist"
-                    else
-                    "İndirme başarıyla "
-                    "tamamlandı ve raporlandı."
-                )
-
-                yield (
-                    "data: "
-                    + json.dumps(
-                        {
-                            "type": "success",
-                            "text": message,
-                        },
-                        ensure_ascii=False
-                    )
-                    + "\n\n"
-                )
-
-            else:
-
-                if use_firefox_cookies:
-
-                    yield (
-                        "data: "
-                        + json.dumps(
-                            {
-                                "type": "warning",
-                                "text": (
-                                    "Firefox çerezleri "
-                                    "okunamadıysa Firefox'u "
-                                    "kapatıp tekrar deneyin."
-                                ),
-                            },
-                            ensure_ascii=False
-                        )
-                        + "\n\n"
-                    )
 
                 yield (
                     "data: "
@@ -672,9 +395,8 @@ async def stream_download(
                         {
                             "type": "error",
                             "text": (
-                                "İndirme tamamlanamadı. "
-                                "yt-dlp çıkış kodu: "
-                                f"{return_code}"
+                                "yt-dlp başlatılamadı: "
+                                f"{exc}"
                             ),
                         },
                         ensure_ascii=False
@@ -682,36 +404,307 @@ async def stream_download(
                     + "\n\n"
                 )
 
-        except asyncio.CancelledError:
+                return
 
+            current_playlist = ""
 
-            if not runner.is_stopped:
+            try:
 
-                try:
-                    runner.stop()
+                for event in runner.events():
 
-                except Exception:
-                    pass
+                    payload = {}
 
-            raise
+                    if isinstance(
+                        event,
+                        PlaylistEvent
+                    ):
 
-        except Exception as exc:
+                        current_playlist = (
+                            f"Video "
+                            f"{event.current}/"
+                            f"{event.total}"
+                        )
 
-            yield (
-                "data: "
-                + json.dumps(
-                    {
-                        "type": "error",
-                        "text": (
-                            "Olaylar okunurken "
-                            "hata oluştu: "
-                            f"{exc}"
-                        ),
-                    },
-                    ensure_ascii=False
+                        payload = {
+                            "type": "playlist",
+                            "counter": (
+                                current_playlist
+                            ),
+                            "text": (
+                                f"{current_playlist} | "
+                                "Video hazırlanıyor..."
+                            ),
+                        }
+
+                    elif isinstance(
+                        event,
+                        ProgressEvent
+                    ):
+
+                        speed = (
+                            getattr(
+                                event,
+                                "speed",
+                                ""
+                            )
+                            or "?"
+                        )
+
+                        eta = (
+                            getattr(
+                                event,
+                                "eta",
+                                ""
+                            )
+                            or "?"
+                        )
+
+                        prefix = (
+                            f"{current_playlist} | "
+                            if current_playlist
+                            else ""
+                        )
+
+                        payload = {
+                            "type": "progress",
+                            "percent": max(
+                                0.0,
+                                min(
+                                    100.0,
+                                    event.percent
+                                ),
+                            ),
+                            "text": (
+                                f"{prefix}"
+                                f"{event.percent:.1f}% | "
+                                f"{speed} | ETA {eta}"
+                            ),
+                        }
+
+                    elif isinstance(
+                        event,
+                        FileDoneEvent
+                    ):
+
+                        prefix = (
+                            f"{current_playlist} | "
+                            if current_playlist
+                            else ""
+                        )
+
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "type": "log",
+                                    "text": "",
+                                },
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "type": "log",
+                                    "text": event.report,
+                                },
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "type": "log",
+                                    "text": (
+                                        "İndirme tamamlandı: "
+                                        f"{event.file_name}"
+                                    ),
+                                },
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                        payload = {
+                            "type": "file_done",
+                            "percent": 100.0,
+                            "text": (
+                                f"{prefix}"
+                                f"Tamamlandı: "
+                                f"{event.file_name}"
+                            ),
+                        }
+
+                    elif isinstance(
+                        event,
+                        WarningEvent
+                    ):
+
+                        payload = {
+                            "type": "log",
+                            "text": event.text,
+                        }
+
+                    elif isinstance(
+                        event,
+                        ErrorEvent
+                    ):
+
+                        # Hata mesajından önce boş satır.
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "type": "log",
+                                    "text": "",
+                                },
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                        payload = {
+                            "type": "log",
+                            "text": event.text,
+                        }
+
+                    if payload:
+
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                payload,
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                    # ErrorEvent sonrasında boş satır.
+                    if isinstance(
+                        event,
+                        ErrorEvent
+                    ):
+
+                        yield (
+                            "data: "
+                            + json.dumps(
+                                {
+                                    "type": "log",
+                                    "text": "",
+                                },
+                                ensure_ascii=False
+                            )
+                            + "\n\n"
+                        )
+
+                    await asyncio.sleep(
+                        0.01
+                    )
+
+                return_code = runner.wait()
+
+                if runner.is_stopped:
+
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "type": "stopped",
+                                "text": (
+                                    "İndirme kullanıcı "
+                                    "tarafından durduruldu."
+                                ),
+                            },
+                            ensure_ascii=False
+                        )
+                        + "\n\n"
+                    )
+
+                elif return_code == 0:
+
+                    message = (
+                        "Tüm playlist başarıyla "
+                        "indirildi ve raporlandı."
+                        if profile_key == "playlist"
+                        else
+                        "İndirme başarıyla "
+                        "tamamlandı ve raporlandı."
+                    )
+
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "type": "success",
+                                "text": message,
+                            },
+                            ensure_ascii=False
+                        )
+                        + "\n\n"
+                    )
+
+                else:
+
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {
+                                "type": "error",
+                                "text": (
+                                    "İndirme tamamlandı ancak bazı videolar indirilemedi. "
+                                    "yt-dlp çıkış kodu: "
+                                    f"{return_code}"
+                                ),
+                            },
+                            ensure_ascii=False
+                        )
+                        + "\n\n"
+                    )
+
+            except asyncio.CancelledError:
+
+                if not runner.is_stopped:
+
+                    try:
+                        runner.stop()
+                    except Exception as exc:
+                        print(
+                            "[API] CANCEL runner.stop "
+                            f"hatası: {exc}",
+                            flush=True,
+                        )
+
+                raise
+
+            except Exception as exc:
+
+                print(
+                    "[API] event_stream genel hatası: "
+                    f"{exc}",
+                    flush=True,
                 )
-                + "\n\n"
-            )
+
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "error",
+                            "text": (
+                                "Olaylar okunurken "
+                                "hata oluştu: "
+                                f"{exc}"
+                            ),
+                        },
+                        ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
 
         finally:
 
@@ -733,7 +726,8 @@ async def stream_download(
 async def exit_application():
 
     print(
-        "[API] Uygulama kapatma isteği alındı."
+        "[API] Uygulama kapatma isteği alındı.",
+        flush=True,
     )
 
     runner = get_active_runner()
@@ -744,7 +738,8 @@ async def exit_application():
 
             print(
                 "[API] Aktif runner "
-                "sonlandırılıyor..."
+                "sonlandırılıyor...",
+                flush=True,
             )
 
             runner.stop()
@@ -753,7 +748,8 @@ async def exit_application():
 
             print(
                 "[API] Runner kapatma hatası: "
-                f"{exc}"
+                f"{exc}",
+                flush=True,
             )
 
     def kill_processes():
@@ -764,7 +760,8 @@ async def exit_application():
 
         print(
             "[API] Deno süreçleri "
-            "sonlandırılıyor..."
+            "sonlandırılıyor...",
+            flush=True,
         )
 
         subprocess.run(
@@ -782,7 +779,8 @@ async def exit_application():
 
         print(
             "[API] Python süreçleri "
-            "sonlandırılıyor..."
+            "sonlandırılıyor...",
+            flush=True,
         )
 
         subprocess.run(
@@ -829,14 +827,18 @@ async def exit_application():
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
-    import threading
+
     import time
     import webbrowser
     import uvicorn
 
     def open_browser():
+
         time.sleep(1.5)
-        webbrowser.open("http://127.0.0.1:8000")
+
+        webbrowser.open(
+            "http://127.0.0.1:8000"
+        )
 
     threading.Thread(
         target=open_browser,
@@ -847,5 +849,4 @@ if __name__ == "__main__":
         "app:app",
         host="127.0.0.1",
         port=8000,
-        reload=True,
     )

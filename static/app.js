@@ -3,112 +3,244 @@ let isDownloading = false;
 let isClosing = false;
 let stopRequested = false;
 
-/* DOM Elemanları */
-const startBtn = document.getElementById("startBtn");
-const cancelBtn = document.getElementById("cancelBtn");
-const closeAppBtn = document.getElementById("closeAppBtn");
-const selectFolderBtn = document.getElementById("selectFolderBtn");
-const statusText = document.getElementById("statusText");
-const urlInput = document.getElementById("urlInput");
-const folderInput = document.getElementById("folderInput");
-const profileSelect = document.getElementById("profileSelect");
-const resSelect = document.getElementById("resSelect");
-const resContainer = document.getElementById("resContainer");
-const cookiesCheck = document.getElementById("cookiesCheck");
-const progressBar = document.getElementById("progressBar");
-const progressText = document.getElementById("progressText");
-const logText = document.getElementById("logText");
+
+/* =========================================================
+ * DOM ELEMANLARI
+ * ========================================================= */
+
+const startBtn =
+    document.getElementById("startBtn");
+
+const cancelBtn =
+    document.getElementById("cancelBtn");
+
+const closeAppBtn =
+    document.getElementById("closeAppBtn");
+
+const selectFolderBtn =
+    document.getElementById("selectFolderBtn");
+
+const statusText =
+    document.getElementById("statusText");
+
+const urlInput =
+    document.getElementById("urlInput");
+
+const folderInput =
+    document.getElementById("folderInput");
+
+const profileSelect =
+    document.getElementById("profileSelect");
+
+const resSelect =
+    document.getElementById("resSelect");
+
+const resContainer =
+    document.getElementById("resContainer");
+
+const cookiesCheck =
+    document.getElementById("cookiesCheck");
+
+const progressBar =
+    document.getElementById("progressBar");
+
+const progressText =
+    document.getElementById("progressText");
+
+const logText =
+    document.getElementById("logText");
 
 
-/* Hata animasyonu */
+/* =========================================================
+ * HATA ANİMASYONU
+ * ========================================================= */
+
 function triggerErrorAnimation(element) {
-    element.classList.remove("input-error");
 
-    void element.offsetWidth;
-
-    element.classList.add("input-error");
-}
-
-
-/* İndirme durumu */
-function setDownloadState(active) {
-    isDownloading = active;
-
-    startBtn.disabled = active || isClosing;
-    cancelBtn.disabled = !active || isClosing;
-
-    urlInput.disabled = active || isClosing;
-    folderInput.disabled = active || isClosing;
-    selectFolderBtn.disabled = active || isClosing;
-
-    profileSelect.disabled = active || isClosing;
-    resSelect.disabled = active || isClosing;
-    cookiesCheck.disabled = active || isClosing;
-}
-
-
-/* Log ekleme */
-function appendLog(text) {
-    if (text === undefined || text === null) {
+    if (!element) {
         return;
     }
 
-    logText.textContent += String(text) + "\n";
+    element.classList.remove(
+        "input-error"
+    );
 
-    requestAnimationFrame(() => {
-        logText.scrollTop = logText.scrollHeight;
-    });
+    void element.offsetWidth;
+
+    element.classList.add(
+        "input-error"
+    );
 }
 
 
-/* URL kontrolü */
+/* =========================================================
+ * İNDİRME DURUMU
+ * ========================================================= */
+
+function setDownloadState(active) {
+
+    isDownloading = active;
+
+    startBtn.disabled =
+        active || isClosing;
+
+    cancelBtn.disabled =
+        !active || isClosing;
+
+    urlInput.disabled =
+        active || isClosing;
+
+    folderInput.disabled =
+        active || isClosing;
+
+    selectFolderBtn.disabled =
+        active || isClosing;
+
+    profileSelect.disabled =
+        active || isClosing;
+
+    resSelect.disabled =
+        active || isClosing;
+
+    cookiesCheck.disabled =
+        active || isClosing;
+}
+
+
+/* =========================================================
+ * LOG
+ * ========================================================= */
+
+function appendLog(text) {
+
+    if (
+        text === undefined ||
+        text === null
+    ) {
+        return;
+    }
+
+    const now = new Date();
+
+    const timestamp =
+        now.toLocaleTimeString(
+            undefined,
+            {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false,
+            }
+        );
+
+    logText.textContent +=
+        `[${timestamp}] ${String(text)}\n`;
+
+    requestAnimationFrame(() => {
+
+        logText.scrollTop =
+            logText.scrollHeight;
+
+    });
+}
+
+/* =========================================================
+ * URL KONTROLÜ
+ * ========================================================= */
+
 function isValidURL(string) {
+
     try {
-        new URL(string);
+
+        const parsed =
+            new URL(string);
+
         return true;
-    } catch (_) {
+
+    } catch (error) {
+
         return false;
     }
 }
 
 
-/* Klasör seçimi */
+/* =========================================================
+ * KLASÖR SEÇİMİ
+ * ========================================================= */
+
 async function selectFolder() {
-    if (isDownloading || isClosing) {
+
+    if (
+        isDownloading ||
+        isClosing
+    ) {
         return;
     }
 
     selectFolderBtn.disabled = true;
-    statusText.textContent = "Klasör seçiliyor...";
+
+    statusText.textContent =
+        "Klasör seçiliyor...";
 
     try {
-        const response = await fetch("/api/select-folder");
+
+        const response =
+            await fetch(
+                "/api/select-folder"
+            );
 
         if (!response.ok) {
-            throw new Error("HTTP " + response.status);
+
+            throw new Error(
+                "HTTP " +
+                response.status
+            );
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (data.error) {
-            throw new Error(data.error);
+
+            throw new Error(
+                data.error
+            );
         }
 
-        if (data.path && !data.cancelled) {
-            folderInput.value = data.path;
+        if (
+            data.path &&
+            !data.cancelled
+        ) {
 
-            folderInput.classList.remove("input-error");
-            selectFolderBtn.classList.remove("input-error");
+            folderInput.value =
+                data.path;
 
-            statusText.textContent = "Klasör seçildi.";
+            folderInput.classList.remove(
+                "input-error"
+            );
+
+            selectFolderBtn.classList.remove(
+                "input-error"
+            );
+
+            statusText.textContent =
+                "Klasör seçildi.";
+
         } else {
-            statusText.textContent = "Klasör seçimi iptal edildi.";
+
+            statusText.textContent =
+                "Klasör seçimi iptal edildi.";
         }
 
     } catch (error) {
-        appendLog("[HATA] Klasör seçilemedi: " + error);
 
-        statusText.textContent = "Klasör seçilemedi.";
+        appendLog(
+            "[HATA] Klasör seçilemedi: " +
+            error
+        );
+
+        statusText.textContent =
+            "Klasör seçilemedi.";
 
         alert(
             "İndirme klasörü seçilemedi.\n\n" +
@@ -116,36 +248,61 @@ async function selectFolder() {
         );
 
     } finally {
+
         selectFolderBtn.disabled =
-            isDownloading || isClosing;
+            isDownloading ||
+            isClosing;
     }
 }
 
 
-/* Seçenekleri yükle */
+/* =========================================================
+ * SEÇENEKLERİ YÜKLE
+ * ========================================================= */
+
 async function loadOptions() {
+
     try {
-        const response = await fetch("/api/options");
+
+        const response =
+            await fetch(
+                "/api/options"
+            );
 
         if (!response.ok) {
-            throw new Error("HTTP " + response.status);
+
+            throw new Error(
+                "HTTP " +
+                response.status
+            );
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
         profileSelect.innerHTML = "";
 
         for (
             const [label, value]
-            of Object.entries(data.profiles || {})
+            of Object.entries(
+                data.profiles || {}
+            )
         ) {
+
             const option =
-                document.createElement("option");
+                document.createElement(
+                    "option"
+                );
 
-            option.value = value;
-            option.textContent = label;
+            option.value =
+                value;
 
-            profileSelect.appendChild(option);
+            option.textContent =
+                label;
+
+            profileSelect.appendChild(
+                option
+            );
         }
 
         resSelect.innerHTML = "";
@@ -154,18 +311,27 @@ async function loadOptions() {
             const resolution
             of data.resolutions || []
         ) {
+
             const option =
-                document.createElement("option");
+                document.createElement(
+                    "option"
+                );
 
-            option.value = resolution;
-            option.textContent = resolution;
+            option.value =
+                resolution;
 
-            resSelect.appendChild(option);
+            option.textContent =
+                resolution;
+
+            resSelect.appendChild(
+                option
+            );
         }
 
         updateResolutionVisibility();
 
     } catch (error) {
+
         appendLog(
             "[HATA] Seçenekler yüklenemedi: " +
             error
@@ -173,39 +339,66 @@ async function loadOptions() {
 
         statusText.textContent =
             "Seçenekler yüklenemedi.";
+
+        alert(
+            "Seçenekler yüklenemedi.\n\n" +
+            error
+        );
     }
 }
 
 
-/* Çözünürlük alanını göster/gizle */
+/* =========================================================
+ * ÇÖZÜNÜRLÜK GÖRÜNÜRLÜĞÜ
+ * ========================================================= */
+
 function updateResolutionVisibility() {
+
+    const shouldShow =
+        profileSelect.value === "video";
+
     resContainer.style.display =
-        profileSelect.value === "video"
+        shouldShow
             ? "inline-flex"
             : "none";
 }
 
 
-profileSelect.addEventListener(
-    "change",
-    updateResolutionVisibility
-);
+/* =========================================================
+ * DOWNLOAD BAŞLAT
+ * ========================================================= */
 
-
-/* İndirme başlat */
 async function startDownload() {
-    if (isDownloading || isClosing) {
+
+    if (
+        isDownloading ||
+        isClosing
+    ) {
+
+        alert(
+            "Devam eden indirme bitmeden " +
+            "yeni indirme başlatılamaz."
+        );
+
         return;
     }
 
     stopRequested = false;
 
-    const url = urlInput.value.trim();
+    const url =
+        urlInput.value.trim();
 
 
     /* URL kontrolü */
-    if (!url || !isValidURL(url)) {
-        triggerErrorAnimation(urlInput);
+
+    if (
+        !url ||
+        !isValidURL(url)
+    ) {
+
+        triggerErrorAnimation(
+            urlInput
+        );
 
         alert(
             "Lütfen geçerli bir indirme linki girin."
@@ -216,10 +409,13 @@ async function startDownload() {
         return;
     }
 
-    urlInput.classList.remove("input-error");
+    urlInput.classList.remove(
+        "input-error"
+    );
 
 
     /* Klasör kontrolü */
+
     const outputDir =
         folderInput.value.trim();
 
@@ -227,11 +423,17 @@ async function startDownload() {
         !outputDir ||
         outputDir === "Klasör seçilmedi"
     ) {
-        triggerErrorAnimation(folderInput);
-        triggerErrorAnimation(selectFolderBtn);
+
+        triggerErrorAnimation(
+            folderInput
+        );
+
+        triggerErrorAnimation(
+            selectFolderBtn
+        );
 
         alert(
-            "Lütfen önce bir indirme klasörü seçin."
+            "Lütfen bir indirme klasörü seçin."
         );
 
         selectFolderBtn.focus();
@@ -240,11 +442,16 @@ async function startDownload() {
     }
 
 
-    /* Eski SSE bağlantısını kapat */
+    /* Eski SSE */
+
     if (eventSource) {
+
         try {
+
             eventSource.close();
-        } catch (_) {}
+
+        } catch (error) {
+        }
 
         eventSource = null;
     }
@@ -252,15 +459,17 @@ async function startDownload() {
 
     setDownloadState(true);
 
-    progressBar.style.width = "0%";
+    progressBar.style.width =
+        "0%";
 
     progressText.textContent =
-        "İndirme başlatılıyor...";
+        "İndirme başlatılıyor.";
 
     statusText.textContent =
-        "İndiriliyor...";
+        "İndiriliyor.";
 
-    logText.textContent = "";
+    logText.textContent =
+        "";
 
     appendLog(
         "[WEB] İndirme isteği başlatıldı."
@@ -282,7 +491,10 @@ async function startDownload() {
     const params =
         new URLSearchParams();
 
-    params.set("url", url);
+    params.set(
+        "url",
+        url
+    );
 
     params.set(
         "profile_key",
@@ -295,6 +507,7 @@ async function startDownload() {
     );
 
     if (resolution) {
+
         params.set(
             "resolution",
             resolution
@@ -309,12 +522,29 @@ async function startDownload() {
     );
 
 
+    const streamUrl =
+        "/api/download/stream?" +
+        params.toString();
+
+
     eventSource =
         new EventSource(
-            "/api/download/stream?" +
-            params.toString()
+            streamUrl
         );
 
+
+    /* =====================================================
+     * SSE ONOPEN
+     * ===================================================== */
+
+    eventSource.onopen =
+        function (event) {
+        };
+
+
+    /* =====================================================
+     * SSE ONMESSAGE
+     * ===================================================== */
 
     eventSource.onmessage =
         function (event) {
@@ -322,12 +552,21 @@ async function startDownload() {
             let data;
 
             try {
-                data = JSON.parse(
-                    event.data
-                );
+
+                data =
+                    JSON.parse(
+                        event.data
+                    );
+
             } catch (error) {
+
                 appendLog(
                     "[HATA] Geçersiz SSE verisi: " +
+                    event.data
+                );
+
+                alert(
+                    "Sunucudan geçersiz veri alındı.\n\n" +
                     event.data
                 );
 
@@ -337,26 +576,30 @@ async function startDownload() {
 
             switch (data.type) {
 
+                /* -----------------------------------------
+                 * LOG
+                 * ----------------------------------------- */
+
                 case "log":
 
-                    /*
-                     * Durdurma isteğinden sonra
-                     * gelen yeni normal logları
-                     * kullanıcıya göstermiyoruz.
-                     *
-                     * Daha önce ekrana ulaşmış
-                     * loglara dokunmuyoruz.
-                     */
                     if (!stopRequested) {
-                        appendLog(data.text);
+
+                        appendLog(
+                            data.text
+                        );
                     }
 
                     break;
 
 
+                /* -----------------------------------------
+                 * WARNING
+                 * ----------------------------------------- */
+
                 case "warning":
 
                     if (!stopRequested) {
+
                         appendLog(
                             "[UYARI] " +
                             data.text
@@ -366,26 +609,47 @@ async function startDownload() {
                     break;
 
 
-                case "error":
+				/* -----------------------------------------
+				 * ERROR
+				 * ----------------------------------------- */
 
-                    appendLog(
-                        "[HATA] " +
-                        data.text
-                    );
+				case "error":
 
-                    statusText.textContent =
-                        "Hata oluştu.";
+					// 1. Log ve UI metinlerini güncelle
+					appendLog(
+						"[HATA] " +
+						data.text
+					);
 
-                    closeSSE();
+					statusText.textContent =
+						"Tamamlandı ancak bazı videolar indirilemedi.";
 
-                    setDownloadState(false);
+					progressText.textContent =
+						"Tamamlandı ancak bazı videolar indirilemedi.";
 
-                    break;
+					// 2. Akış soketini temiz bir şekilde kapat
+					closeSSE();
 
+					// 3. Buton ve input durumlarını sıfırla
+					setDownloadState(
+						false
+					);
+
+					// 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
+					setTimeout(() => {
+						alert(data.text);
+					}, 0);
+
+					break;
+
+                /* -----------------------------------------
+                 * PLAYLIST
+                 * ----------------------------------------- */
 
                 case "playlist":
 
                     if (!stopRequested) {
+
                         progressBar.style.width =
                             "0%";
 
@@ -396,6 +660,10 @@ async function startDownload() {
                     break;
 
 
+                /* -----------------------------------------
+                 * PROGRESS
+                 * ----------------------------------------- */
+
                 case "progress":
 
                     if (!stopRequested) {
@@ -404,6 +672,7 @@ async function startDownload() {
                             typeof data.percent ===
                             "number"
                         ) {
+
                             const percent =
                                 Math.max(
                                     0,
@@ -424,12 +693,12 @@ async function startDownload() {
                     break;
 
 
+                /* -----------------------------------------
+                 * FILE DONE
+                 * ----------------------------------------- */
+
                 case "file_done":
 
-                    /*
-                     * FileDoneEvent özel rapor
-                     * içerdiğinden filtrelemiyoruz.
-                     */
                     progressBar.style.width =
                         "100%";
 
@@ -440,8 +709,13 @@ async function startDownload() {
                     break;
 
 
+				/* -----------------------------------------
+				 * STOPPED
+				 * ----------------------------------------- */
+
 				case "stopped":
 
+					// 1. Log ve UI metinlerini güncelle
 					appendLog(
 						"[WEB] " +
 						(
@@ -457,11 +731,28 @@ async function startDownload() {
 					statusText.textContent =
 						"Durduruldu.";
 
+					// 2. Akış soketini temiz bir şekilde kapat
 					closeSSE();
 
-					setDownloadState(false);
+					// 3. Buton ve input durumlarını sıfırla
+					setDownloadState(
+						false
+					);
+
+					// 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
+					setTimeout(() => {
+						alert(
+							data.text ||
+							"İndirme kullanıcı tarafından durduruldu."
+						);
+					}, 0);
 
 					break;
+
+
+                /* -----------------------------------------
+                 * SUCCESS
+                 * ----------------------------------------- */
 
                 case "success":
 
@@ -473,17 +764,36 @@ async function startDownload() {
                     statusText.textContent =
                         "Tamamlandı.";
 
-                    setDownloadState(false);
-
                     closeSSE();
+
+                    setDownloadState(
+                        false
+                    );
+
+					setTimeout(() => {
+						alert(data.text);
+					}, 0);
+
+                    break;
+
+
+                /* -----------------------------------------
+                 * UNKNOWN
+                 * ----------------------------------------- */
+
+                default:
 
                     break;
             }
         };
 
 
+    /* =====================================================
+     * SSE ONERROR
+     * ===================================================== */
+
     eventSource.onerror =
-        function () {
+        function (error) {
 
             closeSSE();
 
@@ -496,60 +806,72 @@ async function startDownload() {
                 statusText.textContent =
                     "Bağlantı kapandı.";
 
-                /*
-                 * Stop sırasında SSE zaten
-                 * kapatılmışsa gereksiz hata
-                 * mesajı üretme.
-                 */
                 if (!stopRequested) {
+
                     appendLog(
                         "[WEB] SSE bağlantısı kapandı."
+                    );
+
+                    alert(
+                        "İndirme sırasında sunucu bağlantısı kapandı."
                     );
                 }
             }
 
-            setDownloadState(false);
+            setDownloadState(
+                false
+            );
         };
 }
 
 
-/* SSE kapat */
+/* =========================================================
+ * SSE KAPAT
+ * ========================================================= */
+
 function closeSSE() {
+
     if (eventSource) {
 
         try {
+
             eventSource.close();
-        } catch (_) {}
+
+        } catch (error) {
+        }
 
         eventSource = null;
     }
 }
 
 
-/* İndirmeyi durdur */
+/* =========================================================
+ * İNDİRMEYİ DURDUR
+ * ========================================================= */
+
 async function cancelDownload() {
-    if (!isDownloading || isClosing) {
+
+    if (
+        !isDownloading ||
+        isClosing
+    ) {
         return;
     }
 
     cancelBtn.disabled = true;
 
     statusText.textContent =
-        "Durduruluyor...";
+        "Durduruluyor.";
 
     appendLog(
         "[WEB] Durdurma isteği gönderiliyor..."
     );
 
-
     /*
-     * SSE'yi KAPATMIYORUZ.
-     *
-     * Backend'deki active runner'ın
-     * kaybolmaması gerekiyor.
+     * SSE KAPATILMIYOR.
      */
-    stopRequested = true;
 
+    stopRequested = true;
 
     try {
 
@@ -557,22 +879,13 @@ async function cancelDownload() {
             await fetch(
                 "/api/download/stop",
                 {
-                    method: "POST"
+                    method:
+                        "POST"
                 }
             );
 
         const data =
             await response.json();
-
-
-        /*
-         * API'nin cevabını normal log
-         * olarak göstermiyoruz.
-         *
-         * Çünkü aşağıdaki stopped SSE
-         * mesajı kullanıcıya nihai durumu
-         * bildirecek.
-         */
 
     } catch (error) {
 
@@ -581,16 +894,15 @@ async function cancelDownload() {
             error
         );
 
+        alert(
+            "İndirme durdurulamadı.\n\n" +
+            error
+        );
+
     } finally {
 
-        /*
-         * Burada SSE'yi kapatmıyoruz.
-         *
-         * Backend'in "stopped" event'ini
-         * göndermesine izin veriyoruz.
-         */
-
-        progressBar.style.width = "0%";
+        progressBar.style.width =
+            "0%";
 
         progressText.textContent =
             "İndirme durduruldu.";
@@ -598,22 +910,22 @@ async function cancelDownload() {
         statusText.textContent =
             "Durduruldu. Yeni indirme başlatabilirsiniz.";
 
-        /*
-         * Runner backend tarafında durduruldu.
-         * UI yeni işleme hazırlanabilir.
-         */
-        setDownloadState(false);
-
+        setDownloadState(
+            false
+        );
     }
 }
 
 
-/* Uygulamayı kapat */
+/* =========================================================
+ * UYGULAMAYI KAPAT
+ * ========================================================= */
+
 async function closeApplication() {
+
     if (isClosing) {
         return;
     }
-
 
     const confirmed =
         window.confirm(
@@ -622,59 +934,70 @@ async function closeApplication() {
             "Devam etmek istiyor musunuz?"
         );
 
-
     if (!confirmed) {
         return;
     }
 
-
     isClosing = true;
 
-    closeAppBtn.disabled = true;
+    closeAppBtn.disabled =
+        true;
 
-    startBtn.disabled = true;
-    cancelBtn.disabled = true;
+    startBtn.disabled =
+        true;
 
-    selectFolderBtn.disabled = true;
+    cancelBtn.disabled =
+        true;
 
-    urlInput.disabled = true;
-    folderInput.disabled = true;
+    selectFolderBtn.disabled =
+        true;
 
-    profileSelect.disabled = true;
-    resSelect.disabled = true;
-    cookiesCheck.disabled = true;
+    urlInput.disabled =
+        true;
 
+    folderInput.disabled =
+        true;
+
+    profileSelect.disabled =
+        true;
+
+    resSelect.disabled =
+        true;
+
+    cookiesCheck.disabled =
+        true;
 
     document.body.classList.add(
         "app-closing"
     );
 
-
     statusText.textContent =
-        "Uygulama kapatılıyor...";
-
+        "Uygulama kapatılıyor.";
 
     appendLog(
         "[WEB] Uygulama kapatma isteği gönderiliyor..."
     );
 
-
     closeSSE();
-
 
     try {
 
-        await fetch(
-            "/api/app/exit",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-                keepalive: true
-            }
-        );
+        const response =
+            await fetch(
+                "/api/app/exit",
+                {
+                    method:
+                        "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    keepalive:
+                        true
+                }
+            );
 
     } catch (error) {
 
@@ -684,12 +1007,14 @@ async function closeApplication() {
         );
     }
 
-
     setTimeout(() => {
 
         try {
+
             window.close();
-        } catch (_) {}
+
+        } catch (error) {
+        }
 
         statusText.textContent =
             "Uygulama kapatıldı.";
@@ -698,43 +1023,70 @@ async function closeApplication() {
 }
 
 
-/* Event Listeners */
+/* =========================================================
+ * EVENT LISTENERS
+ * ========================================================= */
 
 closeAppBtn.addEventListener(
     "click",
-    closeApplication
+    function () {
+
+        closeApplication();
+    }
 );
+
 
 selectFolderBtn.addEventListener(
     "click",
-    selectFolder
+    function () {
+
+        selectFolder();
+    }
 );
+
 
 startBtn.addEventListener(
     "click",
-    startDownload
+    function () {
+
+        startDownload();
+    }
 );
+
 
 cancelBtn.addEventListener(
     "click",
-    cancelDownload
+    function () {
+
+        cancelDownload();
+    }
+);
+
+
+profileSelect.addEventListener(
+    "change",
+    function () {
+
+        updateResolutionVisibility();
+    }
 );
 
 
 urlInput.addEventListener(
     "keydown",
-    (e) => {
+    function (e) {
+
         if (e.key === "Enter") {
+
             startDownload();
         }
     }
 );
 
 
-/* URL geçerli olduğunda hata çerçevesini kaldır */
 urlInput.addEventListener(
     "input",
-    () => {
+    function () {
 
         const val =
             urlInput.value.trim();
@@ -743,6 +1095,7 @@ urlInput.addEventListener(
             val &&
             isValidURL(val)
         ) {
+
             urlInput.classList.remove(
                 "input-error"
             );
@@ -751,14 +1104,22 @@ urlInput.addEventListener(
 );
 
 
-/* Sayfa kapanırken SSE'yi kapat */
+/* =========================================================
+ * BEFOREUNLOAD
+ * ========================================================= */
+
 window.addEventListener(
     "beforeunload",
-    closeSSE
+    function (event) {
+
+        closeSSE();
+    }
 );
 
 
-/* Init */
+/* =========================================================
+ * INIT
+ * ========================================================= */
 
 folderInput.value =
     "Klasör seçilmedi";

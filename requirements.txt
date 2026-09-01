@@ -6,3 +6,4 @@ deno
 fastapi
 uvicorn
 psutil
+yt-dlp-getpot-wpc

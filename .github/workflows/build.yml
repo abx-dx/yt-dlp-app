@@ -35,15 +35,14 @@ jobs:
           ref: build-infra
           path: projects/yt-dlp-build-infra
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
-      - name: Create development venv
-        shell: bash
+      - name: Install Python Install Manager
+        shell: powershell
         run: |
-          python -m venv apps/python/venv
+          winget install 9NQ7512CXL7T `
+            -e `
+            --accept-source-agreements `
+            --accept-package-agreements `
+            --disable-interactivity
 
       - name: Build portable package
         shell: bash

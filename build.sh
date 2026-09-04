@@ -26,11 +26,11 @@ PYTHON_SCRIPTS_DIR="$PYTHON_DIR/Scripts"
 PORTABLE_WEB_DIR="$DIST_DIR/yt-dlp-web"
 PORTABLE_CORE_DIR="$DIST_DIR/yt-dlp-core"
 
-REQUIREMENTS_FILE="$TARGET_PROJECT_DIR/requirements.txt"
-
 CORE_SOURCE_DIR="$PORTABLE_ROOT/projects/yt-dlp-core"
 
-FFMPEG_BUILDER="$PORTABLE_ROOT/projects/yt-dlp-build-infra/ffmpeg/build-ffmpeg.sh"
+REQUIREMENTS_FILE="$CORE_SOURCE_DIR/requirements.txt"
+
+FFMPEG_BUILDER="$PORTABLE_ROOT/projects/yt-dlp-build-infra/ffmpeg/build-ffmpeg-windows.sh"
 FFMPEG_BIN_DIR="$PYTHON_SITE_PACKAGES/static_ffmpeg/bin/win32"
 
 # ==============================================================================
@@ -388,36 +388,66 @@ echo "[5/8] Python bağımlılıkları kuruluyor..."
     -r "$REQUIREMENTS_FILE"
 
 echo ""
+echo "→ static_ffmpeg FFmpeg dizini hazırlanıyor..."
+
+mkdir -p "$FFMPEG_BIN_DIR"
+
+INSTALLED_CRUMB="$FFMPEG_BIN_DIR/installed.crumb"
+
+touch "$INSTALLED_CRUMB"
+
+echo "   ✅ static_ffmpeg dizini hazır."
+echo "   ✅ installed.crumb hazır."
+echo ""
+
 echo "   → Python bağımlılıkları kontrol ediliyor..."
 
 if ! "$PYTHON_EXE" -c "import fastapi"; then
+
     echo "❌ FastAPI bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "import uvicorn"; then
+
     echo "❌ Uvicorn bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "import yt_dlp"; then
+
     echo "❌ yt-dlp bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "import yt_dlp_ejs"; then
+
     echo "❌ yt-dlp-ejs bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "import mutagen"; then
+
     echo "❌ mutagen bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "import static_ffmpeg"; then
+
     echo "❌ static_ffmpeg bulunamadı."
+
     exit 1
+
 fi
 
 echo "   ✅ Python bağımlılıkları hazır."
@@ -498,22 +528,6 @@ echo "   ✅ nodriver hazır."
 echo ""
 
 # ==============================================================================
-# STATIC-FFMPEG DİZİNİ
-# ==============================================================================
-
-echo "→ static_ffmpeg FFmpeg dizini hazırlanıyor..."
-
-mkdir -p "$FFMPEG_BIN_DIR"
-
-INSTALLED_CRUMB="$FFMPEG_BIN_DIR/installed.crumb"
-
-touch "$INSTALLED_CRUMB"
-
-echo "   ✅ static_ffmpeg dizini hazır."
-echo "   ✅ installed.crumb hazır."
-echo ""
-
-# ==============================================================================
 # 5 — WEB + CORE
 # ==============================================================================
 
@@ -526,8 +540,8 @@ echo "[6/8] Web ve core hazırlanıyor..."
 mkdir -p "$PORTABLE_WEB_DIR/static"
 
 WEB_FILES=(
-    "app.py"
-    "static/app.js"
+    "web.py"
+    "static/web.js"
     "static/index.html"
     "static/style.css"
 )
@@ -572,7 +586,7 @@ CORE_FILES=(
     "toolbox/profiles.py"
     "toolbox/runner.py"
     "toolbox/tools.py"
-	"toolbox/resolver.py"
+    "toolbox/resolver.py"
 )
 
 for file in "${CORE_FILES[@]}"; do
@@ -648,8 +662,6 @@ if [ ! -f "$FFMPEG_BIN_DIR/ffprobe.exe" ]; then
 
 fi
 
-touch "$INSTALLED_CRUMB"
-
 echo "   ✅ ffmpeg.exe hazır."
 echo "   ✅ ffprobe.exe hazır."
 echo ""
@@ -671,7 +683,7 @@ exit /b
 :minimized
 cd /d "%~dp0"
 
-"%~dp0yt-dlp-python\python.exe" "%~dp0yt-dlp-web\app.py"
+"%~dp0yt-dlp-python\python.exe" "%~dp0yt-dlp-web\web.py"
 CMD
 
 echo "   ✅ start.cmd hazır."
@@ -684,23 +696,35 @@ echo ""
 echo "[8/8] Portable paket kontrol ediliyor..."
 
 if [ ! -f "$DIST_DIR/start.cmd" ]; then
+
     echo "❌ start.cmd bulunamadı."
+
     exit 1
+
 fi
 
 if [ ! -f "$PYTHON_EXE" ]; then
+
     echo "❌ Portable Python bulunamadı."
+
     exit 1
+
 fi
 
-if [ ! -f "$PORTABLE_WEB_DIR/app.py" ]; then
-    echo "❌ Portable app.py bulunamadı."
+if [ ! -f "$PORTABLE_WEB_DIR/web.py" ]; then
+
+    echo "❌ Portable web.py bulunamadı."
+
     exit 1
+
 fi
 
 if [ ! -d "$PORTABLE_CORE_DIR/toolbox" ]; then
+
     echo "❌ Portable yt-dlp-core bulunamadı."
+
     exit 1
+
 fi
 
 if ! "$PYTHON_EXE" -c "
@@ -721,8 +745,11 @@ import tkinter
 fi
 
 if ! head -n 1 "$NODRIVER_NETWORK" | grep -q "coding: utf-8"; then
+
     echo "❌ nodriver network.py UTF-8 patchi bulunamadı."
+
     exit 1
+
 fi
 
 if ! grep -q \
@@ -730,6 +757,7 @@ if ! grep -q \
     "$NODRIVER_CONFIG"; then
 
     echo "❌ nodriver Edge executable patchi bulunamadı."
+
     exit 1
 
 fi
@@ -739,6 +767,7 @@ if ! grep -q \
     "$NODRIVER_CONFIG"; then
 
     echo "❌ nodriver --no-proxy-server patchi bulunamadı."
+
     exit 1
 
 fi
@@ -748,6 +777,7 @@ if ! grep -q \
     "$NODRIVER_CONFIG"; then
 
     echo "❌ nodriver --inprivate patchi bulunamadı."
+
     exit 1
 
 fi
@@ -757,23 +787,33 @@ if ! grep -q \
     "$NODRIVER_CONFIG"; then
 
     echo "❌ nodriver headless patchi bulunamadı."
+
     exit 1
 
 fi
 
 if [ ! -f "$FFMPEG_BIN_DIR/installed.crumb" ]; then
+
     echo "❌ installed.crumb bulunamadı."
+
     exit 1
+
 fi
 
 if [ ! -f "$FFMPEG_BIN_DIR/ffmpeg.exe" ]; then
+
     echo "❌ Portable ffmpeg.exe bulunamadı."
+
     exit 1
+
 fi
 
 if [ ! -f "$FFMPEG_BIN_DIR/ffprobe.exe" ]; then
+
     echo "❌ Portable ffprobe.exe bulunamadı."
+
     exit 1
+
 fi
 
 echo "   ✅ Python:"

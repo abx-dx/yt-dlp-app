@@ -95,6 +95,7 @@ async def disable_cache(request, call_next):
 
     return response
 
+
 STATIC_DIR = WEB_DIR / "static"
 
 app.mount(
@@ -194,6 +195,68 @@ async def select_folder():
 
 
 # ---------------------------------------------------------
+# Çerez Dosyası Seçimi
+# ---------------------------------------------------------
+
+@app.get("/api/select-cookie")
+async def select_cookie():
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
+
+        try:
+            selected = filedialog.askopenfilename(
+                title="Çerez dosyasını seçin",
+                filetypes=[
+                    (
+                        "Çerez dosyaları",
+                        "*.txt;*.json;*.cookies"
+                    ),
+                    (
+                        "Tüm dosyalar",
+                        "*.*"
+                    ),
+                ],
+            )
+        finally:
+            root.destroy()
+
+        if not selected:
+            return {
+                "path": "",
+                "cancelled": True,
+            }
+
+        return {
+            "path": str(Path(selected).resolve()),
+            "cancelled": False,
+        }
+
+    except Exception as exc:
+
+        print(
+            "[COOKIE] Çerez dosyası seçim hatası: "
+            f"{exc}",
+            flush=True,
+        )
+
+        return {
+            "path": "",
+            "cancelled": False,
+            "error": str(exc),
+        }
+
+
+# ---------------------------------------------------------
 # Durdurma
 # ---------------------------------------------------------
 
@@ -281,7 +344,8 @@ async def stream_download(
     url: str = Query(...),
     profile_key: str = Query("video"),
     resolution: Optional[str] = Query(None),
-    use_firefox_cookies: bool = Query(False),
+    cookie_mode: str = Query("none"),
+    cookie_value: Optional[str] = Query(None),
     output_dir: str = Query(...),
 ):
 
@@ -331,7 +395,30 @@ async def stream_download(
             profile_key
         )
 
-        if use_firefox_cookies:
+        # Gelen cookie_value parametresini
+        # değiştirmeden ayrı bir değişkende tut.
+        resolved_cookie_value = cookie_value
+
+        if cookie_mode == "browser":
+
+            if resolved_cookie_value != "firefox":
+
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "error",
+                            "text": (
+                                "Desteklenen tarayıcı "
+                                "yalnızca Firefox'tur."
+                            ),
+                        },
+                        ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
+
+                return
 
             yield (
                 "data: "
@@ -347,6 +434,113 @@ async def stream_download(
                 )
                 + "\n\n"
             )
+
+        elif cookie_mode == "file":
+
+            if not resolved_cookie_value:
+
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "error",
+                            "text": (
+                                "Çerez dosyası "
+                                "belirtilmedi."
+                            ),
+                        },
+                        ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
+
+                return
+
+            cookie_path = (
+                Path(resolved_cookie_value)
+                .expanduser()
+                .resolve()
+            )
+
+            if not cookie_path.exists():
+
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "error",
+                            "text": (
+                                "Çerez dosyası "
+                                "bulunamadı."
+                            ),
+                        },
+                        ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
+
+                return
+
+            if not cookie_path.is_file():
+
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "error",
+                            "text": (
+                                "Seçilen çerez yolu "
+                                "bir dosya değil."
+                            ),
+                        },
+                        ensure_ascii=False
+                    )
+                    + "\n\n"
+                )
+
+                return
+
+            resolved_cookie_value = str(
+                cookie_path
+            )
+
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "log",
+                        "text": (
+                            "Çerez dosyası "
+                            "kullanılacak."
+                        ),
+                    },
+                    ensure_ascii=False
+                )
+                + "\n\n"
+            )
+
+        elif cookie_mode == "none":
+
+            resolved_cookie_value = None
+
+        else:
+
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "text": (
+                            "Bilinmeyen çerez modu: "
+                            f"{cookie_mode}"
+                        ),
+                    },
+                    ensure_ascii=False
+                )
+                + "\n\n"
+            )
+
+            return
 
         yield (
             "data: "
@@ -367,7 +561,8 @@ async def stream_download(
             profile=profile,
             url=url,
             output_dir=str(out_dir),
-            use_cookies=use_firefox_cookies,
+            cookie_mode=cookie_mode,
+            cookie_value=resolved_cookie_value,
             max_resolution=(
                 resolution
                 if profile_key == "video"
@@ -846,7 +1041,7 @@ if __name__ == "__main__":
     ).start()
 
     uvicorn.run(
-        "app:app",
+        "web:app",
         host="127.0.0.1",
         port=8000,
     )

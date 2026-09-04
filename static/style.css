@@ -220,6 +220,12 @@ button:disabled {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
+#closeAppBtn span {
+    display: block;
+    line-height: 1;
+    transform: translateY(-1px);
+}
+
 #closeAppBtn:hover:not(:disabled) {
     background: var(--danger-hover);
     opacity: 1;
@@ -273,7 +279,14 @@ legend {
     margin-bottom: 12px;
 }
 
-/* Kontrollerin ortak yüksekliği */
+/* Kontrollerin ortak yüksekliği ve fontu */
+
+input,
+select,
+button {
+    font-family: inherit;
+}
+
 input[type="text"],
 select,
 button {
@@ -289,16 +302,19 @@ select {
 }
 
 /* Checkbox'ın karanlık temada daha düzgün görünmesi */
+
 input[type="checkbox"] {
     accent-color: var(--primary);
 }
 
 /* Başlat butonunu biraz daha belirgin yap */
+
 #startBtn {
     font-weight: 600;
 }
 
 /* Durdur butonu */
+
 #cancelBtn {
     background: var(--danger) !important;
 }
@@ -308,11 +324,13 @@ input[type="checkbox"] {
 }
 
 /* Durum metnini panelden ayır */
+
 #statusText {
     white-space: nowrap;
 }
 
 /* Log scrollbar */
+
 #logText {
     scrollbar-width: thin;
     scrollbar-color: #4b525c var(--log-bg);
@@ -333,4 +351,64 @@ input[type="checkbox"] {
 
 #logText::-webkit-scrollbar-thumb:hover {
     background: #626a76;
+}
+
+/* Cookie seçenekleri */
+
+.cookie-options {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 12px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.cookie-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--text-muted);
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.cookie-options input[type="radio"] {
+    margin: 0;
+    accent-color: var(--primary);
+}
+
+.cookie-options span {
+    font-family: Arial, sans-serif;
+}
+
+.cookie-file-row {
+    display: flex;
+    align-items: center;
+}
+
+.cookie-file-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.cookie-hint {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.cookie-hint a {
+    color: var(--primary);
+    font-family: Arial, sans-serif;
+    text-decoration: none;
+}
+
+.cookie-hint a:hover {
+    text-decoration: underline;
 }

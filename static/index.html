@@ -10,55 +10,169 @@
 
 <body>
 
-<button id="closeAppBtn" type="button" title="Uygulamayı kapat" aria-label="Uygulamayı kapat">×</button>
+<button
+    id="closeAppBtn"
+    type="button"
+    aria-label="Uygulamayı kapat"
+>
+    <span>×</span>
+</button>
 
 <h2>Video / Ses / Playlist İndirici</h2>
 
 <fieldset>
     <legend>Video / Ses / Playlist Linki</legend>
+
     <div class="row">
-        <input type="text" id="urlInput" placeholder="https://...">
+        <input
+            type="text"
+            id="urlInput"
+            placeholder="https://..."
+        >
     </div>
 </fieldset>
 
 <fieldset>
     <legend>İndirme Klasörü</legend>
+
     <div class="row">
-        <input type="text" id="folderInput" readonly>
-        <button id="selectFolderBtn" type="button">Klasör Seç</button>
+        <input
+            type="text"
+            id="folderInput"
+            readonly
+        >
+
+        <button
+            id="selectFolderBtn"
+            type="button"
+        >
+            Klasör Seç
+        </button>
     </div>
 </fieldset>
 
 <fieldset>
     <legend>Ayarlar</legend>
+
     <div class="row">
         <div class="inline-field">
             <label for="profileSelect">Profil:</label>
             <select id="profileSelect"></select>
         </div>
-        <div class="inline-field" id="resContainer" style="display: none;">
+
+        <div
+            class="inline-field"
+            id="resContainer"
+            style="display: none;"
+        >
             <label for="resSelect">Çözünürlük:</label>
             <select id="resSelect"></select>
         </div>
     </div>
-    <div class="row">
-        <input type="checkbox" id="cookiesCheck">
-        <label for="cookiesCheck">Firefox çerezlerini kullan</label>
+
+    <div class="cookie-options">
+
+        <label for="cookieNone">
+            <input
+                type="radio"
+                name="cookieMode"
+                id="cookieNone"
+                value="none"
+                checked
+            >
+            <span>Çerez yok</span>
+        </label>
+
+        <label for="cookieFirefox">
+            <input
+                type="radio"
+                name="cookieMode"
+                id="cookieFirefox"
+                value="browser"
+            >
+            <span>Firefox</span>
+        </label>
+
+        <label for="cookieFile">
+            <input
+                type="radio"
+                name="cookieMode"
+                id="cookieFile"
+                value="file"
+            >
+            <span>Çerez dosyası</span>
+        </label>
+
     </div>
+
+    <div
+        class="row cookie-file-row"
+        id="cookieFileRow"
+        style="display: none;"
+    >
+        <input
+            type="text"
+            id="cookieFileInput"
+            readonly
+        >
+
+        <button
+            id="selectCookieBtn"
+            type="button"
+        >
+            Gözat
+        </button>
+    </div>
+
+    <div class="cookie-hint">
+        Yalnızca Firefox üzerinden çerez tespiti yapılabilir.
+        Diğer tarayıcılarda
+        <a
+            href="https://chromewebstore.google.com/detail/cookie-exporter/fhnmmidekmgocpjdceeffppcodigillk"
+            target="_blank"
+            rel="noopener noreferrer"
+        >Cookie Exporter</a>
+        eklentisi ile indirilen dosyayı çerez dosyası olarak
+        yükleyebilirsiniz.
+    </div>
+
 </fieldset>
 
 <fieldset>
     <legend>İlerleme</legend>
+
     <div class="progress-bar-container">
         <div class="progress-bar" id="progressBar"></div>
     </div>
-    <div id="progressText" style="font-size: 13px;">Henüz indirme yok.</div>
+
+    <div
+        id="progressText"
+        style="font-size: 13px;"
+    >
+        Henüz indirme yok.
+    </div>
 </fieldset>
 
 <div class="row">
-    <button id="startBtn" type="button">İndirmeyi Başlat</button>
-    <button id="cancelBtn" type="button" disabled style="background:#dc3545;">Durdur</button>
-    <span id="statusText">Hazır.</span>
+    <button
+        id="startBtn"
+        type="button"
+    >
+        İndirmeyi Başlat
+    </button>
+
+    <button
+        id="cancelBtn"
+        type="button"
+        disabled
+        style="background:#dc3545;"
+    >
+        Durdur
+    </button>
+
+    <span id="statusText">
+        Hazır.
+    </span>
 </div>
 
 <fieldset style="margin-top: 15px;">
@@ -66,6 +180,7 @@
     <div id="logText"></div>
 </fieldset>
 
-<script src="/static/app.js"></script>
+<script src="/static/web.js"></script>
+
 </body>
 </html>

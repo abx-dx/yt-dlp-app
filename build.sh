@@ -26,9 +26,9 @@ PYTHON_SCRIPTS_DIR="$PYTHON_DIR/Scripts"
 PORTABLE_WEB_DIR="$DIST_DIR/yt-dlp-web"
 PORTABLE_CORE_DIR="$DIST_DIR/yt-dlp-core"
 
-REQUIREMENTS_FILE="$TARGET_PROJECT_DIR/requirements.txt"
-
 CORE_SOURCE_DIR="$PORTABLE_ROOT/projects/yt-dlp-core"
+
+REQUIREMENTS_FILE="$CORE_SOURCE_DIR/requirements.txt"
 
 FFMPEG_BUILDER="$PORTABLE_ROOT/projects/yt-dlp-build-infra/ffmpeg/build-ffmpeg.sh"
 FFMPEG_BIN_DIR="$PYTHON_SITE_PACKAGES/static_ffmpeg/bin/win32"
@@ -526,8 +526,8 @@ echo "[6/8] Web ve core hazırlanıyor..."
 mkdir -p "$PORTABLE_WEB_DIR/static"
 
 WEB_FILES=(
-    "app.py"
-    "static/app.js"
+    "web.py"
+    "static/web.js"
     "static/index.html"
     "static/style.css"
 )
@@ -671,7 +671,7 @@ exit /b
 :minimized
 cd /d "%~dp0"
 
-"%~dp0yt-dlp-python\python.exe" "%~dp0yt-dlp-web\app.py"
+"%~dp0yt-dlp-python\python.exe" "%~dp0yt-dlp-web\web.py"
 CMD
 
 echo "   ✅ start.cmd hazır."
@@ -693,8 +693,8 @@ if [ ! -f "$PYTHON_EXE" ]; then
     exit 1
 fi
 
-if [ ! -f "$PORTABLE_WEB_DIR/app.py" ]; then
-    echo "❌ Portable app.py bulunamadı."
+if [ ! -f "$PORTABLE_WEB_DIR/web.py" ]; then
+    echo "❌ Portable web.py bulunamadı."
     exit 1
 fi
 

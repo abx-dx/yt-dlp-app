@@ -38,8 +38,23 @@ const resSelect =
 const resContainer =
     document.getElementById("resContainer");
 
-const cookiesCheck =
-    document.getElementById("cookiesCheck");
+const cookieNone =
+    document.getElementById("cookieNone");
+
+const cookieFirefox =
+    document.getElementById("cookieFirefox");
+
+const cookieFile =
+    document.getElementById("cookieFile");
+
+const cookieFileRow =
+    document.getElementById("cookieFileRow");
+
+const cookieFileInput =
+    document.getElementById("cookieFileInput");
+
+const selectCookieBtn =
+    document.getElementById("selectCookieBtn");
 
 const progressBar =
     document.getElementById("progressBar");
@@ -102,7 +117,19 @@ function setDownloadState(active) {
     resSelect.disabled =
         active || isClosing;
 
-    cookiesCheck.disabled =
+    cookieNone.disabled =
+        active || isClosing;
+
+    cookieFirefox.disabled =
+        active || isClosing;
+
+    cookieFile.disabled =
+        active || isClosing;
+
+    cookieFileInput.disabled =
+        active || isClosing;
+
+    selectCookieBtn.disabled =
         active || isClosing;
 }
 
@@ -143,6 +170,7 @@ function appendLog(text) {
 
     });
 }
+
 
 /* =========================================================
  * URL KONTROLÜ
@@ -250,6 +278,120 @@ async function selectFolder() {
     } finally {
 
         selectFolderBtn.disabled =
+            isDownloading ||
+            isClosing;
+    }
+}
+
+
+/* =========================================================
+ * ÇEREZ GÖRÜNÜRLÜĞÜ
+ * ========================================================= */
+
+function updateCookieVisibility() {
+
+    const selected =
+        document.querySelector(
+            'input[name="cookieMode"]:checked'
+        );
+
+    if (!selected) {
+        return;
+    }
+
+    cookieFileRow.style.display =
+        selected.value === "file"
+            ? "flex"
+            : "none";
+}
+
+
+/* =========================================================
+ * ÇEREZ DOSYASI SEÇİMİ
+ * ========================================================= */
+
+async function selectCookie() {
+
+    if (
+        isDownloading ||
+        isClosing
+    ) {
+        return;
+    }
+
+    selectCookieBtn.disabled = true;
+
+    statusText.textContent =
+        "Çerez dosyası seçiliyor...";
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/select-cookie"
+            );
+
+        if (!response.ok) {
+
+            throw new Error(
+                "HTTP " +
+                response.status
+            );
+        }
+
+        const data =
+            await response.json();
+
+        if (data.error) {
+
+            throw new Error(
+                data.error
+            );
+        }
+
+        if (
+            data.path &&
+            !data.cancelled
+        ) {
+
+            cookieFileInput.value =
+                data.path;
+
+            cookieFileInput.classList.remove(
+                "input-error"
+            );
+
+            selectCookieBtn.classList.remove(
+                "input-error"
+            );
+
+            statusText.textContent =
+                "Çerez dosyası seçildi.";
+
+        } else {
+
+            statusText.textContent =
+                "Çerez dosyası seçimi iptal edildi.";
+        }
+
+    } catch (error) {
+
+        appendLog(
+            "[HATA] Çerez dosyası seçilemedi: " +
+            error
+        );
+
+        statusText.textContent =
+            "Çerez dosyası seçilemedi.";
+
+        alert(
+            "Çerez dosyası seçilemedi.\n\n" +
+            error
+        );
+
+    } finally {
+
+        selectCookieBtn.disabled =
             isDownloading ||
             isClosing;
     }
@@ -442,6 +584,45 @@ async function startDownload() {
     }
 
 
+    /* Çerez kontrolü */
+
+    const cookieMode =
+        document.querySelector(
+            'input[name="cookieMode"]:checked'
+        ).value;
+
+    let cookieValue = "";
+
+    if (cookieMode === "browser") {
+
+        cookieValue = "firefox";
+
+    } else if (cookieMode === "file") {
+
+        cookieValue =
+            cookieFileInput.value.trim();
+
+        if (!cookieValue) {
+
+            triggerErrorAnimation(
+                cookieFileInput
+            );
+
+            triggerErrorAnimation(
+                selectCookieBtn
+            );
+
+            alert(
+                "Lütfen bir çerez dosyası seçin."
+            );
+
+            selectCookieBtn.focus();
+
+            return;
+        }
+    }
+
+
     /* Eski SSE */
 
     if (eventSource) {
@@ -484,9 +665,6 @@ async function startDownload() {
             ? resSelect.value
             : "";
 
-    const useCookies =
-        cookiesCheck.checked;
-
 
     const params =
         new URLSearchParams();
@@ -515,11 +693,17 @@ async function startDownload() {
     }
 
     params.set(
-        "use_firefox_cookies",
-        useCookies
-            ? "true"
-            : "false"
+        "cookie_mode",
+        cookieMode
     );
+
+    if (cookieValue) {
+
+        params.set(
+            "cookie_value",
+            cookieValue
+        );
+    }
 
 
     const streamUrl =
@@ -609,38 +793,39 @@ async function startDownload() {
                     break;
 
 
-				/* -----------------------------------------
-				 * ERROR
-				 * ----------------------------------------- */
+                /* -----------------------------------------
+                 * ERROR
+                 * ----------------------------------------- */
 
-				case "error":
+                case "error":
 
-					// 1. Log ve UI metinlerini güncelle
-					appendLog(
-						"[HATA] " +
-						data.text
-					);
+                    // 1. Log ve UI metinlerini güncelle
+                    appendLog(
+                        "[HATA] " +
+                        data.text
+                    );
 
-					statusText.textContent =
-						"Tamamlandı ancak bazı videolar indirilemedi.";
+                    statusText.textContent =
+                        "Tamamlandı ancak bazı videolar indirilemedi.";
 
-					progressText.textContent =
-						"Tamamlandı ancak bazı videolar indirilemedi.";
+                    progressText.textContent =
+                        "Tamamlandı ancak bazı videolar indirilemedi.";
 
-					// 2. Akış soketini temiz bir şekilde kapat
-					closeSSE();
+                    // 2. Akış soketini temiz bir şekilde kapat
+                    closeSSE();
 
-					// 3. Buton ve input durumlarını sıfırla
-					setDownloadState(
-						false
-					);
+                    // 3. Buton ve input durumlarını sıfırla
+                    setDownloadState(
+                        false
+                    );
 
-					// 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
-					setTimeout(() => {
-						alert(data.text);
-					}, 0);
+                    // 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
+                    setTimeout(() => {
+                        alert(data.text);
+                    }, 0);
 
-					break;
+                    break;
+
 
                 /* -----------------------------------------
                  * PLAYLIST
@@ -709,45 +894,45 @@ async function startDownload() {
                     break;
 
 
-				/* -----------------------------------------
-				 * STOPPED
-				 * ----------------------------------------- */
+                /* -----------------------------------------
+                 * STOPPED
+                 * ----------------------------------------- */
 
-				case "stopped":
+                case "stopped":
 
-					// 1. Log ve UI metinlerini güncelle
-					appendLog(
-						"[WEB] " +
-						(
-							data.text ||
-							"İndirme durduruldu."
-						)
-					);
+                    // 1. Log ve UI metinlerini güncelle
+                    appendLog(
+                        "[WEB] " +
+                        (
+                            data.text ||
+                            "İndirme durduruldu."
+                        )
+                    );
 
-					appendLog(
-						"[WEB] Yeni işlem başlatılabilir."
-					);
+                    appendLog(
+                        "[WEB] Yeni işlem başlatılabilir."
+                    );
 
-					statusText.textContent =
-						"Durduruldu.";
+                    statusText.textContent =
+                        "Durduruldu.";
 
-					// 2. Akış soketini temiz bir şekilde kapat
-					closeSSE();
+                    // 2. Akış soketini temiz bir şekilde kapat
+                    closeSSE();
 
-					// 3. Buton ve input durumlarını sıfırla
-					setDownloadState(
-						false
-					);
+                    // 3. Buton ve input durumlarını sıfırla
+                    setDownloadState(
+                        false
+                    );
 
-					// 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
-					setTimeout(() => {
-						alert(
-							data.text ||
-							"İndirme kullanıcı tarafından durduruldu."
-						);
-					}, 0);
+                    // 4. UI çiziminin (repaint) tamamlanmasını bekleyip alert'i bas
+                    setTimeout(() => {
+                        alert(
+                            data.text ||
+                            "İndirme kullanıcı tarafından durduruldu."
+                        );
+                    }, 0);
 
-					break;
+                    break;
 
 
                 /* -----------------------------------------
@@ -770,9 +955,9 @@ async function startDownload() {
                         false
                     );
 
-					setTimeout(() => {
-						alert(data.text);
-					}, 0);
+                    setTimeout(() => {
+                        alert(data.text);
+                    }, 0);
 
                     break;
 
@@ -964,7 +1149,19 @@ async function closeApplication() {
     resSelect.disabled =
         true;
 
-    cookiesCheck.disabled =
+    cookieNone.disabled =
+        true;
+
+    cookieFirefox.disabled =
+        true;
+
+    cookieFile.disabled =
+        true;
+
+    cookieFileInput.disabled =
+        true;
+
+    selectCookieBtn.disabled =
         true;
 
     document.body.classList.add(
@@ -1045,6 +1242,15 @@ selectFolderBtn.addEventListener(
 );
 
 
+selectCookieBtn.addEventListener(
+    "click",
+    function () {
+
+        selectCookie();
+    }
+);
+
+
 startBtn.addEventListener(
     "click",
     function () {
@@ -1068,6 +1274,33 @@ profileSelect.addEventListener(
     function () {
 
         updateResolutionVisibility();
+    }
+);
+
+
+cookieNone.addEventListener(
+    "change",
+    function () {
+
+        updateCookieVisibility();
+    }
+);
+
+
+cookieFirefox.addEventListener(
+    "change",
+    function () {
+
+        updateCookieVisibility();
+    }
+);
+
+
+cookieFile.addEventListener(
+    "change",
+    function () {
+
+        updateCookieVisibility();
     }
 );
 
@@ -1123,5 +1356,7 @@ window.addEventListener(
 
 folderInput.value =
     "Klasör seçilmedi";
+
+updateCookieVisibility();
 
 loadOptions();

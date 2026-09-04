@@ -22,7 +22,8 @@ class PlaylistInfo:
 def get_playlist_info(
     tools: Tools,
     url: str,
-    use_cookies: bool,
+    cookie_mode: str = "none",
+    cookie_value: str | None = None,
 ) -> PlaylistInfo:
 
     cmd = [
@@ -33,7 +34,10 @@ def get_playlist_info(
     ]
 
     cmd.extend(
-        cookie_args(use_cookies)
+        cookie_args(
+            cookie_mode,
+            cookie_value,
+        )
     )
 
     cmd.append(url)
@@ -44,6 +48,7 @@ def get_playlist_info(
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=tools.env(),
         **get_subprocess_args(),
     )
 

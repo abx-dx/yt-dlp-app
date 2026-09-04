@@ -37,7 +37,8 @@ def build_command(
     profile: Profile,
     url: str,
     output_dir: str | None = None,
-    use_cookies: bool = False,
+    cookie_mode: str = "none",
+    cookie_value: str | None = None,
     max_resolution: str | None = None,
 ) -> list[str]:
 
@@ -52,7 +53,10 @@ def build_command(
     # --------------------------------------------------------------
 
     cmd.extend(
-        cookie_args(use_cookies)
+        cookie_args(
+            cookie_mode,
+            cookie_value,
+        )
     )
 
     # --------------------------------------------------------------
@@ -90,7 +94,6 @@ def build_command(
         ]
     )
 
-
     # --------------------------------------------------------------
     # Format
     # --------------------------------------------------------------
@@ -121,7 +124,8 @@ def build_command(
         profile,
         url,
         output_dir,
-        use_cookies,
+        cookie_mode,
+        cookie_value,
     )
 
     cmd.extend(

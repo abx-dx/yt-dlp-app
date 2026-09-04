@@ -12,7 +12,8 @@ import psutil
 
 from .command import build_command
 from .parser import Event, OutputParser
-from .profiles import Profile
+from .profiles import Profile, get_profile
+from .playlist import resolve_profile
 from .resolver import resolve_music_url
 from .tools import Tools, get_subprocess_args
 
@@ -24,7 +25,8 @@ class YtDlpRunner:
         profile: Profile,
         url: str,
         output_dir: str | None = None,
-        use_cookies: bool = False,
+        cookie_mode: str = "none",
+        cookie_value: str | None = None,
         max_resolution: str | None = None,
     ):
         self.tools = tools
@@ -41,7 +43,8 @@ class YtDlpRunner:
             exist_ok=True,
         )
 
-        self.use_cookies = use_cookies
+        self.cookie_mode = cookie_mode
+        self.cookie_value = cookie_value
         self.max_resolution = max_resolution
 
         self.process: subprocess.Popen[str] | None = None
@@ -99,7 +102,8 @@ class YtDlpRunner:
             profile=self.profile,
             url=url,
             output_dir=str(self.temp_dir),
-            use_cookies=self.use_cookies,
+            cookie_mode=self.cookie_mode,
+            cookie_value=self.cookie_value,
             max_resolution=self.max_resolution,
         )
 
@@ -343,7 +347,40 @@ class ResolverYoutubeDL(YoutubeDL):
 def _run_yt_dlp_with_resolver() -> int:
     from yt_dlp import parse_options
 
-    parsed = parse_options(sys.argv[1:])
+    argv = sys.argv[1:]
+
+    if (
+        len(argv) >= 3
+        and argv[0] == "profile"
+    ):
+        profile = get_profile(argv[1])
+
+        tools = Tools.discover()
+
+        output, extra_args = resolve_profile(
+            tools,
+            profile,
+            argv[2],
+            None,
+            "none",
+            None,
+        )
+
+        profile_args = [
+            "-f",
+            profile.format,
+            *profile.args,
+            *extra_args,
+            "-o",
+            output,
+        ]
+
+        argv = [
+            *profile_args,
+            *argv[2:],
+        ]
+
+    parsed = parse_options(argv)
 
     params = parsed.ydl_opts
 

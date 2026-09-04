@@ -1,11 +1,35 @@
-BROWSER = "firefox"
+from __future__ import annotations
 
 
-def cookie_args(enabled: bool) -> list[str]:
-    if not enabled:
+def cookie_args(
+    mode: str = "none",
+    value: str | None = None,
+) -> list[str]:
+    if mode == "none":
         return []
 
-    return [
-        "--cookies-from-browser",
-        BROWSER,
-    ]
+    if mode == "browser":
+        if not value:
+            raise ValueError(
+                "Tarayıcı belirtilmedi."
+            )
+
+        return [
+            "--cookies-from-browser",
+            value.lower(),
+        ]
+
+    if mode == "file":
+        if not value:
+            raise ValueError(
+                "Cookie dosyası belirtilmedi."
+            )
+
+        return [
+            "--cookies",
+            value,
+        ]
+
+    raise ValueError(
+        f"Bilinmeyen cookie modu: {mode}"
+    )

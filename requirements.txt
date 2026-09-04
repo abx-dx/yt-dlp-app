@@ -1,0 +1,9 @@
+yt-dlp
+yt-dlp-ejs
+mutagen
+static-ffmpeg
+deno
+fastapi
+uvicorn
+psutil
+yt-dlp-getpot-wpc

@@ -26,16 +26,35 @@ class Tools:
         return [self.python_exec, "-m", "yt_dlp"]
 
     def env(self) -> dict:
-        """Çalıştırma ortamı değişkenlerini (environment variables) döndürür."""
+        """Çalıştırma ortamı değişkenlerini döndürür."""
         env_dict = os.environ.copy()
-        
+
         # Deno binary'sinin bulunduğu klasörü PATH'in EN BAŞINA ekliyoruz.
-        # yt-dlp alt süreç başladığında Deno'yu doğrudan PATH üzerinden otomatik tespit eder.
         if self.deno:
             deno_dir = str(Path(self.deno).parent)
             current_path = env_dict.get("PATH", "")
-            env_dict["PATH"] = f"{deno_dir}{os.pathsep}{current_path}"
-            
+            env_dict["PATH"] = (
+                f"{deno_dir}{os.pathsep}{current_path}"
+            )
+
+        # Firefox Windows profilini gerçek kullanıcı AppData
+        # üzerinden bulabilmesi için yalnızca yt-dlp subprocess'ine
+        # gerçek APPDATA'yı veriyoruz.
+        user_profile = env_dict.get("USERPROFILE")
+
+        if user_profile:
+            env_dict["APPDATA"] = os.path.join(
+                user_profile,
+                "AppData",
+                "Roaming",
+            )
+
+            env_dict["LOCALAPPDATA"] = os.path.join(
+                user_profile,
+                "AppData",
+                "Local",
+            )
+
         return env_dict
 
     @classmethod

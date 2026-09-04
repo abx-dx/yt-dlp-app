@@ -14,7 +14,8 @@ def resolve_profile(
     profile: Profile,
     url: str,
     output_dir: str | None,
-    use_cookies: bool,
+    cookie_mode: str = "none",
+    cookie_value: str | None = None,
 ) -> tuple[str, list[str]]:
 
     if profile.name != "playlist":
@@ -23,7 +24,8 @@ def resolve_profile(
     info = get_playlist_info(
         tools,
         url,
-        use_cookies,
+        cookie_mode,
+        cookie_value,
     )
 
     if info.is_album:

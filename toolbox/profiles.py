@@ -26,14 +26,25 @@ RESOLUTIONS = [
 ]
 
 
+AUDIO_FORMAT = (
+    "774"
+    "/141"
+    "/bestaudio[acodec=opus]"
+    "/bestaudio"
+)
+
+
 def build_video_format(
     max_res: str | None = None,
 ) -> str:
 
     if not max_res or max_res == "En İyi":
         return (
-            "bestvideo+bestaudio[acodec=opus]"
-            "/bestaudio/best"
+            "bestvideo+774"
+            "/bestvideo+141"
+            "/bestvideo+bestaudio[acodec=opus]"
+            "/bestvideo+bestaudio"
+            "/best"
         )
 
     height = (
@@ -46,15 +57,18 @@ def build_video_format(
 
     if not height.isdigit():
         return (
-            "bestvideo+bestaudio[acodec=opus]"
-            "/bestaudio/best"
+            "bestvideo+774"
+            "/bestvideo+141"
+            "/bestvideo+bestaudio[acodec=opus]"
+            "/bestvideo+bestaudio"
+            "/best"
         )
 
     return (
-        f"bestvideo[height<={height}]"
-        f"+bestaudio[acodec=opus]"
-        f"/bestvideo[height<={height}]"
-        f"+bestaudio"
+        f"bestvideo[height<={height}]+774"
+        f"/bestvideo[height<={height}]+141"
+        f"/bestvideo[height<={height}]+bestaudio[acodec=opus]"
+        f"/bestvideo[height<={height}]+bestaudio"
         f"/best[height<={height}]"
         f"/best"
     )
@@ -85,7 +99,7 @@ PROFILES: dict[str, Profile] = {
 
     "audio": Profile(
         name="audio",
-        format="bestaudio[acodec=opus]/bestaudio",
+        format=AUDIO_FORMAT,
         output="%(artist,uploader)s - %(title)s.%(ext)s",
         args=[
             "-x",
@@ -111,7 +125,7 @@ PROFILES: dict[str, Profile] = {
 
     "playlist": Profile(
         name="playlist",
-        format="bestaudio[acodec=opus]/bestaudio",
+        format=AUDIO_FORMAT,
         playlist=True,
         output=(
             "%(playlist_title)s/"

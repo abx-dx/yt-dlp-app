@@ -1,0 +1,60 @@
+name: yt-dlp-gui Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - yt-dlp-gui
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Checkout yt-dlp-gui
+        uses: actions/checkout@v4
+        with:
+          path: projects/yt-dlp-gui
+
+      - name: Checkout yt-dlp-core
+        uses: actions/checkout@v4
+        with:
+          repository: abx-dx/yt-dlp-app
+          ref: yt-dlp-core
+          path: projects/yt-dlp-core
+
+      - name: Checkout yt-dlp-build-infra
+        uses: actions/checkout@v4
+        with:
+          repository: abx-dx/yt-dlp-app
+          ref: build-infra
+          path: projects/yt-dlp-build-infra
+
+      - name: Install Python Install Manager
+        shell: powershell
+        run: |
+          winget install 9NQ7512CXL7T `
+            -e `
+            --accept-source-agreements `
+            --accept-package-agreements `
+            --disable-interactivity
+
+      - name: Build portable package
+        shell: bash
+        working-directory: projects/yt-dlp-gui
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./build.sh
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-dlp-gui-portable
+          path: projects/yt-dlp-gui/dist/
+          if-no-files-found: error

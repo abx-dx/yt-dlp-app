@@ -44,8 +44,8 @@ jobs:
             --enable-ffmpeg \
             --enable-ffprobe \
             --enable-protocol=file,pipe \
-            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp \
-            --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm \
+            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata \
+            --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm,ipod \
             --enable-decoder=mjpeg,webp \
             --enable-encoder=mjpeg \
             --enable-parser=opus,vp9,av1,h264,mjpeg \

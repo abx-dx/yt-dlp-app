@@ -39,13 +39,91 @@ BRANCH="yt-dlp-core"
 ARTIFACT_NAME="ffmpeg-win-x64"
 
 RUN_ID=""
+WATCH_PID=""
+INTERRUPTED=0
+
+# ==============================================================================
+# CTRL+C / TERM
+# ==============================================================================
+
+handle_interrupt() {
+
+    INTERRUPTED=1
+
+    echo ""
+    echo "========================================================"
+    echo "⚠️ CUSTOM FFMPEG BUILD DURDURULUYOR"
+    echo "========================================================"
+
+    # --------------------------------------------------------------------------
+    # GitHub Actions run'ını iptal et
+    # --------------------------------------------------------------------------
+
+    if [ -n "$RUN_ID" ]; then
+
+        echo "→ GitHub Actions run iptal ediliyor..."
+        echo "   Run ID: $RUN_ID"
+
+        gh run cancel \
+            "$RUN_ID" \
+            --repo "$REPO" \
+            2>/dev/null || true
+
+        echo "   ✅ İptal isteği gönderildi."
+
+    else
+
+        echo "→ Henüz workflow run ID alınmadı."
+
+    fi
+
+    # --------------------------------------------------------------------------
+    # gh run watch sürecini sonlandır
+    # --------------------------------------------------------------------------
+
+    if [ -n "$WATCH_PID" ]; then
+
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+
+            echo "→ GitHub Actions watch süreci sonlandırılıyor..."
+
+            kill "$WATCH_PID" 2>/dev/null || true
+
+            echo "   ✅ Watch süreci sonlandırıldı."
+
+        fi
+
+        WATCH_PID=""
+
+    fi
+
+    echo ""
+
+    exit 130
+}
+
+trap handle_interrupt INT TERM
 
 # ==============================================================================
 # TEMİZLİK
 # ==============================================================================
 
 cleanup() {
+
+    local exit_code=$?
+
+    # Interrupt sırasında watch hâlâ varsa zorla sonlandır
+    if [ -n "$WATCH_PID" ]; then
+
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+            kill "$WATCH_PID" 2>/dev/null || true
+        fi
+
+    fi
+
     rm -rf "$FFMPEG_BIN_DIR"
+
+    return "$exit_code"
 }
 
 trap cleanup EXIT
@@ -117,52 +195,32 @@ echo ""
 
 echo "→ GitHub Actions FFmpeg build tetikleniyor..."
 
-gh workflow run \
-    "$WORKFLOW" \
-    --repo "$REPO" \
-    --ref "$BRANCH"
+WORKFLOW_RUN_URL="$(
+    gh workflow run \
+        "$WORKFLOW" \
+        --repo "$REPO" \
+        --ref "$BRANCH" \
+        2>&1
+)"
 
-echo "   ✅ CI tetiklendi."
-echo ""
+echo "$WORKFLOW_RUN_URL"
 
-# ==============================================================================
-# YENİ RUN ID'SİNİ BUL
-# ==============================================================================
-
-echo "→ Yeni workflow run bekleniyor..."
-
-RUN_ID=""
-
-for _ in $(seq 1 30); do
-
-    CURRENT_RUN_ID="$(
-        gh run list \
-            --repo "$REPO" \
-            --workflow="$WORKFLOW" \
-            --branch "$BRANCH" \
-            --event workflow_dispatch \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId // empty' \
-            2>/dev/null || true
-    )"
-
-    if [ -n "$CURRENT_RUN_ID" ] \
-        && [ "$CURRENT_RUN_ID" != "$PREVIOUS_RUN_ID" ]; then
-
-        RUN_ID="$CURRENT_RUN_ID"
-        break
-    fi
-
-    sleep 2
-done
+RUN_ID="$(
+    printf '%s\n' "$WORKFLOW_RUN_URL" |
+        grep -oE '/actions/runs/[0-9]+' |
+        grep -oE '[0-9]+$' |
+        tail -n 1
+)"
 
 if [ -z "$RUN_ID" ]; then
-    echo "❌ Yeni workflow run bulunamadı."
+
+    echo "❌ Workflow run ID alınamadı."
     exit 1
+
 fi
 
-echo "   ✅ Yeni run ID: $RUN_ID"
+echo "   ✅ CI tetiklendi."
+echo "   Run ID: $RUN_ID"
 echo ""
 
 # ==============================================================================
@@ -171,10 +229,25 @@ echo ""
 
 echo "→ Custom FFmpeg derlemesi bekleniyor..."
 
-if ! gh run watch \
+gh run watch \
     "$RUN_ID" \
     --repo "$REPO" \
-    --exit-status; then
+    --exit-status &
+
+WATCH_PID=$!
+
+if wait "$WATCH_PID"; then
+
+    WATCH_PID=""
+
+else
+
+    WATCH_EXIT=$?
+    WATCH_PID=""
+
+    if [ "$INTERRUPTED" -eq 1 ]; then
+        exit 130
+    fi
 
     echo ""
     echo "❌ Custom FFmpeg CI başarısız oldu."
@@ -187,7 +260,8 @@ if ! gh run watch \
         --log-failed \
         || true
 
-    exit 1
+    exit "$WATCH_EXIT"
+
 fi
 
 echo ""
@@ -283,4 +357,3 @@ echo "========================================================"
 echo "FFmpeg : $FFMPEG_OUTPUT_DIR/ffmpeg.exe"
 echo "FFprobe: $FFMPEG_OUTPUT_DIR/ffprobe.exe"
 echo "Run ID : $RUN_ID"
-echo "========================================================"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# yt-dlp-app — Custom FFmpeg Builder
+# yt-dlp-app — Custom FFmpeg Linux Builder
 # ==============================================================================
 
 set -Eeuo pipefail
@@ -15,7 +15,7 @@ if [ -z "$FFMPEG_OUTPUT_DIR" ]; then
     echo "❌ FFmpeg çıktı dizini belirtilmedi."
     echo ""
     echo "Kullanım:"
-    echo "   build-ffmpeg.sh <output-dir>"
+    echo "   build-ffmpeg-linux.sh <output-dir>"
     exit 1
 fi
 
@@ -34,9 +34,9 @@ FFMPEG_BIN_DIR="$SCRIPT_DIR/build_bin"
 # ==============================================================================
 
 REPO="abx-dx/yt-dlp-app"
-WORKFLOW="build-ffmpeg.yml"
-BRANCH="yt-dlp-core"
-ARTIFACT_NAME="ffmpeg-win-x64"
+WORKFLOW="build-ffmpeg-linux.yml"
+BRANCH="yt-dlp-yml"
+ARTIFACT_NAME="ffmpeg-linux-x64"
 
 RUN_ID=""
 WATCH_PID=""
@@ -52,7 +52,7 @@ handle_interrupt() {
 
     echo ""
     echo "========================================================"
-    echo "⚠️ CUSTOM FFMPEG BUILD DURDURULUYOR"
+    echo "⚠️ CUSTOM FFMPEG LINUX BUILD DURDURULUYOR"
     echo "========================================================"
 
     # --------------------------------------------------------------------------
@@ -112,7 +112,7 @@ cleanup() {
 
     local exit_code=$?
 
-    # Interrupt sırasında watch hâlâ varsa zorla sonlandır
+    # Interrupt sırasında watch hâlâ varsa sonlandır
     if [ -n "$WATCH_PID" ]; then
 
         if kill -0 "$WATCH_PID" 2>/dev/null; then
@@ -133,7 +133,7 @@ trap cleanup EXIT
 # ==============================================================================
 
 echo "========================================================"
-echo "🚀 CUSTOM FFMPEG BUILD"
+echo "🚀 CUSTOM FFMPEG LINUX BUILD"
 echo "========================================================"
 echo "Repository : $REPO"
 echo "Workflow   : $WORKFLOW"
@@ -193,7 +193,7 @@ echo ""
 # CI TETİKLE
 # ==============================================================================
 
-echo "→ GitHub Actions FFmpeg build tetikleniyor..."
+echo "→ GitHub Actions FFmpeg Linux build tetikleniyor..."
 
 WORKFLOW_RUN_URL="$(
     gh workflow run \
@@ -227,7 +227,7 @@ echo ""
 # CI BEKLE
 # ==============================================================================
 
-echo "→ Custom FFmpeg derlemesi bekleniyor..."
+echo "→ Custom FFmpeg Linux derlemesi bekleniyor..."
 
 gh run watch \
     "$RUN_ID" \
@@ -250,7 +250,7 @@ else
     fi
 
     echo ""
-    echo "❌ Custom FFmpeg CI başarısız oldu."
+    echo "❌ Custom FFmpeg Linux CI başarısız oldu."
     echo ""
     echo "Hata logu:"
 
@@ -265,14 +265,14 @@ else
 fi
 
 echo ""
-echo "   ✅ Custom FFmpeg derlemesi tamamlandı."
+echo "   ✅ Custom FFmpeg Linux derlemesi tamamlandı."
 echo ""
 
 # ==============================================================================
 # ARTIFACT İNDİR
 # ==============================================================================
 
-echo "→ FFmpeg artifact indiriliyor..."
+echo "→ FFmpeg Linux artifact indiriliyor..."
 
 gh run download \
     "$RUN_ID" \
@@ -289,7 +289,7 @@ ZIP_FILE="$(
 )"
 
 if [ -z "$ZIP_FILE" ]; then
-    echo "❌ FFmpeg artifact ZIP bulunamadı."
+    echo "❌ FFmpeg Linux artifact ZIP bulunamadı."
     exit 1
 fi
 
@@ -309,15 +309,19 @@ rm -f "$ZIP_FILE"
 # KONTROL
 # ==============================================================================
 
-if [ ! -f "$FFMPEG_BIN_DIR/ffmpeg.exe" ]; then
-    echo "❌ ffmpeg.exe bulunamadı."
+if [ ! -f "$FFMPEG_BIN_DIR/ffmpeg" ]; then
+    echo "❌ ffmpeg bulunamadı."
     exit 1
 fi
 
-if [ ! -f "$FFMPEG_BIN_DIR/ffprobe.exe" ]; then
-    echo "❌ ffprobe.exe bulunamadı."
+if [ ! -f "$FFMPEG_BIN_DIR/ffprobe" ]; then
+    echo "❌ ffprobe bulunamadı."
     exit 1
 fi
+
+chmod +x \
+    "$FFMPEG_BIN_DIR/ffmpeg" \
+    "$FFMPEG_BIN_DIR/ffprobe"
 
 echo "   ✅ Artifact hazır."
 echo ""
@@ -329,31 +333,35 @@ echo ""
 echo "→ FFmpeg binary'leri çıktı dizinine kopyalanıyor..."
 
 cp \
-    "$FFMPEG_BIN_DIR/ffmpeg.exe" \
+    "$FFMPEG_BIN_DIR/ffmpeg" \
     "$FFMPEG_OUTPUT_DIR/"
 
 cp \
-    "$FFMPEG_BIN_DIR/ffprobe.exe" \
+    "$FFMPEG_BIN_DIR/ffprobe" \
     "$FFMPEG_OUTPUT_DIR/"
+
+chmod +x \
+    "$FFMPEG_OUTPUT_DIR/ffmpeg" \
+    "$FFMPEG_OUTPUT_DIR/ffprobe"
 
 # ==============================================================================
 # SON KONTROLLER
 # ==============================================================================
 
-if [ ! -f "$FFMPEG_OUTPUT_DIR/ffmpeg.exe" ]; then
-    echo "❌ ffmpeg.exe çıktı dizinine kopyalanamadı."
+if [ ! -f "$FFMPEG_OUTPUT_DIR/ffmpeg" ]; then
+    echo "❌ ffmpeg çıktı dizinine kopyalanamadı."
     exit 1
 fi
 
-if [ ! -f "$FFMPEG_OUTPUT_DIR/ffprobe.exe" ]; then
-    echo "❌ ffprobe.exe çıktı dizinine kopyalanamadı."
+if [ ! -f "$FFMPEG_OUTPUT_DIR/ffprobe" ]; then
+    echo "❌ ffprobe çıktı dizinine kopyalanamadı."
     exit 1
 fi
 
 echo ""
 echo "========================================================"
-echo "🎉 CUSTOM FFMPEG HAZIR"
+echo "🎉 CUSTOM FFMPEG LINUX HAZIR"
 echo "========================================================"
-echo "FFmpeg : $FFMPEG_OUTPUT_DIR/ffmpeg.exe"
-echo "FFprobe: $FFMPEG_OUTPUT_DIR/ffprobe.exe"
+echo "FFmpeg : $FFMPEG_OUTPUT_DIR/ffmpeg"
+echo "FFprobe: $FFMPEG_OUTPUT_DIR/ffprobe"
 echo "Run ID : $RUN_ID"

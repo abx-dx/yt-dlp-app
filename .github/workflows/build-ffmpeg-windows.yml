@@ -1,8 +1,7 @@
-name: Custom FFmpeg Build
+name: Custom FFmpeg Windows Build
 
 on:
   workflow_call:
-  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -21,12 +20,40 @@ jobs:
             mingw-w64-x86_64-yasm
             mingw-w64-x86_64-nasm
 
-      - name: Checkout FFmpeg Release Branch
+      - name: Resolve Latest FFmpeg Tag
+        id: resolve-ffmpeg
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          tag="$(
+            git ls-remote --tags --refs https://github.com/FFmpeg/FFmpeg.git |
+              sed 's#.*refs/tags/##' |
+              grep -E '^n[0-9]+\.[0-9]+(\.[0-9]+)?$' |
+              sort -V |
+              tail -n 1
+          )"
+
+          if [ -z "$tag" ]; then
+            echo "ERROR: Could not determine the latest FFmpeg release tag."
+            exit 1
+          fi
+
+          if ! [[ "$tag" =~ ^n[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "ERROR: Invalid FFmpeg release tag selected: $tag"
+            exit 1
+          fi
+
+          echo "FFmpeg release selected: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout FFmpeg Release
         uses: actions/checkout@v4
         with:
           repository: FFmpeg/FFmpeg
-          ref: release/6.1
+          ref: ${{ steps.resolve-ffmpeg.outputs.tag }}
           path: ffmpeg_src
+          fetch-depth: 1
 
       - name: Configure and Build
         shell: msys2 {0}

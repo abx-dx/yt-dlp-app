@@ -1,0 +1,8 @@
+name: yt-dlp-cli Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-cli:
+    uses: abx-dx/yt-dlp-app/.github/workflows/build-cli.yml@yt-dlp-cli

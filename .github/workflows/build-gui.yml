@@ -1,0 +1,8 @@
+name: yt-dlp-gui Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-gui:
+    uses: abx-dx/yt-dlp-app/.github/workflows/build-gui.yml@yt-dlp-gui

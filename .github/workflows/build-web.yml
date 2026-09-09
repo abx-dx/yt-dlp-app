@@ -1,0 +1,8 @@
+name: yt-dlp-web Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-web:
+    uses: abx-dx/yt-dlp-app/.github/workflows/build-web.yml@yt-dlp-web

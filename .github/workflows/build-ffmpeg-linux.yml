@@ -1,0 +1,111 @@
+name: Custom FFmpeg Build
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential yasm nasm git zip
+
+      - name: Resolve Latest FFmpeg Tag
+        id: resolve-ffmpeg
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          tag="$(
+            git ls-remote --tags --refs https://github.com/FFmpeg/FFmpeg.git |
+              sed 's#.*refs/tags/##' |
+              grep -E '^n[0-9]+\.[0-9]+(\.[0-9]+)?$' |
+              sort -V |
+              tail -n 1
+          )"
+
+          if [ -z "$tag" ]; then
+            echo "ERROR: Could not determine the latest FFmpeg release tag."
+            exit 1
+          fi
+
+          if ! [[ "$tag" =~ ^n[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "ERROR: Invalid FFmpeg release tag selected: $tag"
+            exit 1
+          fi
+
+          echo "FFmpeg release selected: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout FFmpeg Release
+        uses: actions/checkout@v4
+        with:
+          repository: FFmpeg/FFmpeg
+          ref: ${{ steps.resolve-ffmpeg.outputs.tag }}
+          path: ffmpeg_src
+          fetch-depth: 1
+
+      - name: Configure and Build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd ffmpeg_src
+
+          ./configure \
+            --target-os=linux \
+            --arch=x86_64 \
+            --disable-everything \
+            --disable-doc \
+            --disable-debug \
+            --disable-version3 \
+            --disable-autodetect \
+            --disable-shared \
+            --enable-static \
+            --enable-ffmpeg \
+            --enable-ffprobe \
+            --enable-protocol=file,pipe \
+            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata \
+            --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm,ipod \
+            --enable-decoder=mjpeg,webp \
+            --enable-encoder=mjpeg \
+            --enable-parser=opus,vp9,av1,h264,mjpeg \
+            --enable-bsf=mjpeg2jpeg,opus_metadata \
+            --enable-filter=crop,scale,format \
+            --enable-swscale \
+            --enable-small \
+            --extra-cflags="-Os" \
+            --extra-ldflags="-static"
+
+          make -j"$(nproc)"
+
+      - name: Verify Binaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          ./ffmpeg_src/ffmpeg -version | head -n 1
+          ./ffmpeg_src/ffprobe -version | head -n 1
+          file ffmpeg_src/ffmpeg ffmpeg_src/ffprobe
+
+      - name: Archive Binaries
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          mkdir -p build_bin
+          cp ffmpeg_src/ffmpeg build_bin/
+          cp ffmpeg_src/ffprobe build_bin/
+          chmod +x build_bin/ffmpeg build_bin/ffprobe
+
+          cd build_bin
+          zip ../ffmpeg-linux-x64.zip ffmpeg ffprobe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-linux-x64
+          path: ffmpeg-linux-x64.zip

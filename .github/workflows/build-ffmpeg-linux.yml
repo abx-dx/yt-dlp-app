@@ -1,0 +1,8 @@
+name: Custom FFmpeg Linux Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    uses: abx-dx/yt-dlp-app/.github/workflows/build-ffmpeg-linux.yml@build-infra

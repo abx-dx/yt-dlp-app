@@ -1,0 +1,8 @@
+name: yt-dlp-gui Compile
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compile-gui:
+    uses: abx-dx/yt-dlp-app/.github/workflows/compile-gui.yml@yt-dlp-gui

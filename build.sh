@@ -501,16 +501,166 @@ if b'\xB1Inf' in data:
     p.write_bytes(data)
 "
 
-sed -i \
--e 's|browser_executable_path = find_chrome_executable()|browser_executable_path = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"|' \
--e '/self\._browser_args = browser_args/c\        self._browser_args = browser_args or []\n        for arg in ["--no-proxy-server", "--inprivate", "--disable-gpu", "--disable-extensions", "--disable-component-update", "--disable-default-apps", "--disable-sync", "--disable-breakpad", "--disable-dev-shm-usage", "--disable-session-crashed-bubble", "--disable-search-engine-choice-screen", "--no-first-run", "--no-service-autorun", "--no-default-browser-check", "--no-proxy-server-check", "--no-pings", "--password-store=basic", "--disable-infobars", "--mute-audio"]:\n            if arg not in self._browser_args:\n                self._browser_args.append(arg)' \
--e 's|self.headless = headless|self.headless = True|' \
-"$NODRIVER_CONFIG"
-
 echo "   ✅ network.py UTF-8 patchi uygulandı."
+
+# ------------------------------------------------------------------------------
+# config.py patch
+#
+# Orijinal nodriver 0.50.3 Config.__init__() bölümü,
+# çalışan Edge/WPC ayarlarıyla değiştirilir.
+# ------------------------------------------------------------------------------
+
+"$PYTHON_EXE" - "$NODRIVER_CONFIG" <<'PY'
+from pathlib import Path
+import sys
+
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+
+
+old = """        if not browser_executable_path:
+            browser_executable_path = find_chrome_executable()
+
+        self._browser_args = browser_args
+
+        self.browser_executable_path = browser_executable_path
+        self.headless = headless
+"""
+
+new = """        browser_executable_path = (
+            r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+        )
+
+        required_browser_args = [
+            "--no-proxy-server",
+            "--inprivate",
+            "--disable-gpu",
+            "--disable-extensions",
+            "--disable-component-update",
+            "--disable-default-apps",
+            "--disable-sync",
+            "--disable-breakpad",
+            "--disable-dev-shm-usage",
+            "--disable-session-crashed-bubble",
+            "--disable-search-engine-choice-screen",
+            "--no-first-run",
+            "--no-service-autorun",
+            "--no-default-browser-check",
+            "--no-proxy-server-check",
+            "--no-pings",
+            "--password-store=basic",
+            "--disable-infobars",
+            "--mute-audio",
+        ]
+
+        for arg in required_browser_args:
+            if arg not in browser_args:
+                browser_args.append(arg)
+
+        self._browser_args = browser_args
+
+        self.browser_executable_path = browser_executable_path
+
+        # WPC için headless zorunlu.
+        self.headless = True
+"""
+
+
+if old not in text:
+    raise SystemExit(
+        "❌ nodriver config.py patch noktası bulunamadı."
+    )
+
+
+text = text.replace(old, new, 1)
+
+path.write_text(text, encoding="utf-8")
+PY
+
+echo "   ✅ config.py patchi uygulandı."
+
+# ------------------------------------------------------------------------------
+# config.py doğrulama
+# ------------------------------------------------------------------------------
+
+"$PYTHON_EXE" - "$NODRIVER_CONFIG" <<'PY'
+from pathlib import Path
+import sys
+
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+
+
+expected_path = (
+    'browser_executable_path = (\n'
+    '            r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"\n'
+    '        )'
+)
+
+if expected_path not in text:
+    raise SystemExit(
+        "❌ nodriver config.py içinde Edge yolu doğrulanamadı."
+    )
+
+
+required = [
+    "--no-proxy-server",
+    "--inprivate",
+    "--disable-gpu",
+    "--disable-extensions",
+    "--disable-component-update",
+    "--disable-default-apps",
+    "--disable-sync",
+    "--disable-breakpad",
+    "--disable-dev-shm-usage",
+    "--disable-session-crashed-bubble",
+    "--disable-search-engine-choice-screen",
+    "--no-first-run",
+    "--no-service-autorun",
+    "--no-default-browser-check",
+    "--no-proxy-server-check",
+    "--no-pings",
+    "--password-store=basic",
+    "--disable-infobars",
+    "--mute-audio",
+]
+
+for arg in required:
+    if f'"{arg}"' not in text:
+        raise SystemExit(
+            f"❌ nodriver browser arg eksik: {arg}"
+        )
+
+
+if "self._browser_args = browser_args" not in text:
+    raise SystemExit(
+        "❌ nodriver browser_args doğrulanamadı."
+    )
+
+
+if "self.headless = True" not in text:
+    raise SystemExit(
+        "❌ nodriver headless=True doğrulanamadı."
+    )
+
+
+if "required_browser_args = [" not in text:
+    raise SystemExit(
+        "❌ nodriver required_browser_args bloğu doğrulanamadı."
+    )
+
+
+print("   OK: Edge executable yolu dogru.")
+print("   OK: Browser argumanlari dogru.")
+print("   OK: browser_args korunuyor.")
+print("   OK: headless=True dogru.")
+PY
+
+echo "   → nodriver patchleri tamamlandı."
 echo "   ✅ Edge executable ayarlandı."
-echo "   ✅ --no-proxy-server eklendi."
-echo "   ✅ --inprivate eklendi."
+echo "   ✅ Browser argümanları ayarlandı."
 echo "   ✅ headless=True ayarlandı."
 echo ""
 
@@ -736,7 +886,9 @@ if ! head -n 1 "$NODRIVER_NETWORK" | grep -q "coding: utf-8"; then
 fi
 
 if ! grep -q \
-    'browser_executable_path = r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"' \
+    'browser_executable_path = (' \
+    "$NODRIVER_CONFIG" || ! grep -q \
+    'r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"' \
     "$NODRIVER_CONFIG"; then
 
     echo "❌ nodriver Edge executable patchi bulunamadı."

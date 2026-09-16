@@ -29,6 +29,8 @@ COMMON_ARGS = [
     "utf-8",
     "--concurrent-fragments",
     "16",
+    "--extractor-args",
+    "youtube:player_client=web_embedded",
 ]
 
 
@@ -64,6 +66,17 @@ def build_command(
     # --------------------------------------------------------------
 
     cmd.extend(COMMON_ARGS)
+
+    # --------------------------------------------------------------
+    # Playlist olmayan profillerde playlist indirmeyi engelle
+    # --------------------------------------------------------------
+
+    if not profile.playlist:
+        cmd.extend(
+            [
+                "--no-playlist",
+            ]
+        )
 
     # --------------------------------------------------------------
     # JavaScript runtime

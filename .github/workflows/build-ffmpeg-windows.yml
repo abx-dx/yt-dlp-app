@@ -19,6 +19,7 @@ jobs:
             mingw-w64-x86_64-toolchain
             mingw-w64-x86_64-yasm
             mingw-w64-x86_64-nasm
+            mingw-w64-x86_64-openssl
 
       - name: Resolve Latest FFmpeg Tag
         id: resolve-ffmpeg
@@ -70,8 +71,9 @@ jobs:
             --disable-autodetect \
             --enable-ffmpeg \
             --enable-ffprobe \
-            --enable-protocol=file,pipe \
-            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata \
+            --enable-openssl \
+            --enable-protocol=file,pipe,http,https,tcp,tls,crypto \
+            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata,hls \
             --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm,ipod \
             --enable-decoder=mjpeg,webp \
             --enable-encoder=mjpeg \

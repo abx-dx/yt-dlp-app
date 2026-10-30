@@ -11,7 +11,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential yasm nasm git zip
+          sudo apt-get install -y build-essential yasm nasm git zip libssl-dev
 
       - name: Resolve Latest FFmpeg Tag
         id: resolve-ffmpeg
@@ -66,8 +66,9 @@ jobs:
             --enable-static \
             --enable-ffmpeg \
             --enable-ffprobe \
-            --enable-protocol=file,pipe \
-            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata \
+            --enable-openssl \
+            --enable-protocol=file,pipe,http,https,tcp,tls,crypto \
+            --enable-demuxer=matroska,webm,ogg,mov,image2,image2pipe,mjpeg,webp,ffmetadata,hls \
             --enable-muxer=matroska,ogg,opus,image2,image2pipe,mjpeg,mov,mp4,mp3,webm,ipod \
             --enable-decoder=mjpeg,webp \
             --enable-encoder=mjpeg \

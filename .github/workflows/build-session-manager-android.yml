@@ -1,0 +1,246 @@
+name: Session Manager Plugin Android ARM64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-arm64:
+    name: Build Android ARM64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Checkout AWS Session Manager Plugin
+        uses: actions/checkout@v4
+        with:
+          repository: aws/session-manager-plugin
+          ref: mainline
+          path: aws-source
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: Install Android NDK
+        run: |
+          set -euo pipefail
+          NDK_VERSION=27.2.12479018
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}"
+          export ANDROID_SDK_ROOT="$SDK_ROOT"
+          export ANDROID_HOME="$SDK_ROOT"
+          test -d "$SDK_ROOT"
+
+          sdkmanager --install "ndk;${NDK_VERSION}"
+
+          NDK="$SDK_ROOT/ndk/$NDK_VERSION"
+          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+
+          test -x "$CC"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Generate version information
+        working-directory: aws-source
+        env:
+          GO111MODULE: 'off'
+        run: |
+          go run src/version/versiongenerator/version-gen.go
+
+      - name: Fix duplicated Android argv entry
+        working-directory: aws-source
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+
+          p = Path("src/sessionmanagerplugin-main/main.go")
+          s = p.read_text()
+
+          if '"path/filepath"' in s:
+              raise SystemExit("filepath importu zaten mevcut.")
+
+          if s.count('"os"') != 1:
+              raise SystemExit("os importu beklenen sayıda değil.")
+
+          s = s.replace('"os"', '"os"\n        "path/filepath"', 1)
+
+          old = "session.ValidateInputAndStartSession(os.Args, os.Stdout)"
+          new = "\n".join([
+              "args := os.Args",
+              "if len(args) > 1 && filepath.Base(args[0]) == filepath.Base(args[1]) {",
+              "    args = append(args[:1], args[2:]...)",
+              "}",
+              "session.ValidateInputAndStartSession(args, os.Stdout)",
+          ])
+
+          if s.count(old) != 1:
+              raise SystemExit("Beklenen çağrı bulunamadı.")
+
+          p.write_text(s.replace(old, new, 1))
+          print("Android argv düzeltmesi uygulandı.")
+          PYCODE
+
+          gofmt -w src/sessionmanagerplugin-main/main.go
+          sed -n '12,45p' src/sessionmanagerplugin-main/main.go
+
+      - name: Prepare GOPATH build tree
+        working-directory: aws-source
+        run: |
+          PRIVATE="$GITHUB_WORKSPACE/aws-source/build/private"
+          SOURCE="$PRIVATE/src/github.com/aws/session-manager-plugin"
+
+          mkdir -p "$SOURCE"
+          cp -a src "$SOURCE/"
+
+          echo "PRIVATE=$PRIVATE" >> "$GITHUB_ENV"
+          echo "SOURCE=$SOURCE" >> "$GITHUB_ENV"
+
+      - name: Configure Android plugin logging
+        run: |
+          python3 - "$SOURCE/src/log/log_unix.go" "$SOURCE/src/log/log_android.go" <<'PY'
+          from pathlib import Path
+          import sys
+          import textwrap
+
+          unix = Path(sys.argv[1])
+          android = Path(sys.argv[2])
+
+          s = unix.read_text()
+          old = "//go:build darwin || freebsd || linux || netbsd || openbsd"
+          new = "//go:build (darwin || freebsd || linux || netbsd || openbsd) && !android"
+          legacy = "// +build darwin freebsd linux netbsd openbsd"
+
+          if s.count(old) != 1 or s.count(legacy) != 1:
+              raise SystemExit("Beklenmeyen Unix build tag yapısı.")
+          if android.exists():
+              raise SystemExit("log_android.go zaten mevcut.")
+
+          s = s.replace(old, new, 1)
+          s = s.replace(legacy, legacy + "\n// +build !android", 1)
+          unix.write_text(s)
+
+          source = """
+          //go:build android
+          // +build android
+
+          package log
+
+          import (
+              "bytes"
+              "fmt"
+              "os"
+              "path/filepath"
+          )
+
+          func getLogConfigBytes(clientName string) (logConfigBytes []byte) {
+              base := filepath.Join(
+                  os.Getenv("HOME"),
+                  ".local", "state", "session-manager-plugin",
+              )
+
+              if os.Getenv("HOME") == "" {
+                  base = filepath.Join(os.TempDir(), "session-manager-plugin")
+              }
+
+              DefaultSeelogConfigFilePath = filepath.Join(base, SeelogConfigFileName)
+              DefaultLogDir = filepath.Join(base, "logs")
+              ApplicationLogFile = fmt.Sprintf("%s%s", clientName, LogFileExtension)
+              ErrorLogFile = fmt.Sprintf("%s%s", ErrorLogFileSuffix, LogFileExtension)
+
+              if err := os.MkdirAll(DefaultLogDir, 0700); err != nil {
+                  base = filepath.Join(os.TempDir(), "session-manager-plugin")
+                  DefaultSeelogConfigFilePath = filepath.Join(base, SeelogConfigFileName)
+                  DefaultLogDir = filepath.Join(base, "logs")
+
+                  if err := os.MkdirAll(DefaultLogDir, 0700); err != nil {
+                      return []byte(`<seelog minlevel="debug"><outputs formatid="debug"><console/></outputs><formats><format id="debug" format="%Msg%n"/></formats></seelog>`)
+                  }
+              }
+
+              config := DefaultConfig()
+              config = bytes.Replace(
+                  config,
+                  []byte(`minlevel="off"`),
+                  []byte(`minlevel="debug"`),
+                  1,
+              )
+              return config
+          }
+          """
+          android.write_text(textwrap.dedent(source).lstrip())
+          PY
+          gofmt -w "$SOURCE/src/log/log_android.go" "$SOURCE/src/log/log_unix.go"
+
+      - name: Cross-compile Android ARM64
+        working-directory: aws-source
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: '1'
+          GO111MODULE: 'off'
+        run: |
+          export GOPATH="$PRIVATE:$GITHUB_WORKSPACE/aws-source/vendor"
+          export CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          test -x "$CC"
+          "$CC" --version | head -n 1
+          go env GOOS GOARCH CGO_ENABLED CC
+
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+
+          go build \
+            -trimpath \
+            -ldflags="-s -w" \
+            -o "$GITHUB_WORKSPACE/dist/session-manager-plugin" \
+            "$SOURCE/src/sessionmanagerplugin-main/main.go"
+
+      - name: Build Android argument diagnostic
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: '0'
+          GO111MODULE: 'off'
+        run: |
+          cat > "$RUNNER_TEMP/argsdiag.go" <<'EOF'
+          package main
+
+          import (
+              "fmt"
+              "os"
+              "runtime"
+          )
+
+          func main() {
+              fmt.Printf("GOOS=%s GOARCH=%s\n", runtime.GOOS, runtime.GOARCH)
+              fmt.Printf("len(os.Args)=%d\n", len(os.Args))
+              for i, arg := range os.Args {
+                  fmt.Printf("args[%d]=%q\n", i, arg)
+              }
+          }
+          EOF
+
+          go build -trimpath -o dist/android-argsdiag "$RUNNER_TEMP/argsdiag.go"
+          file dist/android-argsdiag
+
+      - name: Validate binary
+        run: |
+          file dist/session-manager-plugin
+          readelf -h dist/session-manager-plugin
+          test "$(readelf -h dist/session-manager-plugin | awk '/Machine:/ {print $2}')" = "AArch64"
+
+      - name: Upload Android ARM64 binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-manager-plugin-android-arm64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

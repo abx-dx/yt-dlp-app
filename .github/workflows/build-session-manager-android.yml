@@ -181,6 +181,33 @@ jobs:
           PY
           gofmt -w "$SOURCE/src/log/log_android.go" "$SOURCE/src/log/log_unix.go"
 
+      - name: Diagnose Android shellsession source selection
+        working-directory: aws-source
+        env:
+          GOOS: android
+          GOARCH: arm64
+          CGO_ENABLED: '1'
+          GO111MODULE: 'off'
+        run: |
+          export GOPATH="$PRIVATE:$GITHUB_WORKSPACE/aws-source/vendor"
+          PACKAGE="github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session/shellsession"
+
+          echo "===== ANDROID BUILD ENVIRONMENT ====="
+          go env GOOS GOARCH CGO_ENABLED
+
+          echo
+          echo "===== SELECTED SOURCE FILES ====="
+          go list -f 'GoFiles={{.GoFiles}} | CgoFiles={{.CgoFiles}} | IgnoredGoFiles={{.IgnoredGoFiles}}' "$PACKAGE"
+
+          echo
+          echo "===== SHELLSESSION_UNIX.GO CHECK ====="
+          if go list -f '{{range .GoFiles}}{{println .}}{{end}}' "$PACKAGE" |
+              grep -Fxq 'shellsession_unix.go'; then
+              echo "RESULT: shellsession_unix.go ANDROID BUILD'E DAHIL"
+          else
+              echo "::warning::shellsession_unix.go Android build'e dahil değil."
+          fi
+
       - name: Cross-compile Android ARM64
         working-directory: aws-source
         env:

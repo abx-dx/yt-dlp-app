@@ -41,7 +41,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout FFmpeg Release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: FFmpeg/FFmpeg
           ref: ${{ steps.resolve-ffmpeg.outputs.tag }}
@@ -105,7 +105,7 @@ jobs:
           zip ../ffmpeg-linux-x64.zip ffmpeg ffprobe
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-linux-x64
           path: ffmpeg-linux-x64.zip

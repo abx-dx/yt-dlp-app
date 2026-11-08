@@ -11,15 +11,16 @@ jobs:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
             base-devel
             git
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-yasm
-            mingw-w64-x86_64-nasm
-            mingw-w64-x86_64-openssl
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-yasm
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-pkgconf
 
       - name: Resolve Latest FFmpeg Tag
         id: resolve-ffmpeg
@@ -49,7 +50,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout FFmpeg Release
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: FFmpeg/FFmpeg
           ref: ${{ steps.resolve-ffmpeg.outputs.tag }}
@@ -60,8 +61,15 @@ jobs:
         shell: msys2 {0}
         run: |
           cd ffmpeg_src
+          echo "===== OPENSSL DETECTION ====="
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+          command -v pkg-config
+          pkg-config --modversion openssl
+          pkg-config --cflags --libs openssl
+          test -f /ucrt64/include/openssl/ssl.h
 
-          ./configure \
+          if ! ./configure \
+            --pkg-config=/ucrt64/bin/pkg-config \
             --target-os=mingw32 \
             --arch=x86_64 \
             --disable-everything \
@@ -83,7 +91,14 @@ jobs:
             --enable-swscale \
             --enable-small \
             --extra-cflags="-Os" \
-            --extra-ldflags="-static -static-libgcc -static-libstdc++"
+            --extra-ldflags="-static -static-libgcc -static-libstdc++" \
+                --extra-libs="-lcrypt32 -lws2_32 -lgdi32"; then
+            echo "===== OPENSSL CONFIGURE DIAGNOSTICS ====="
+            grep -n -i -A15 -B10 -E "openssl|check_pkg_config|check_lib" ffbuild/config.log || true
+            echo "===== CONFIGURE LOG END ====="
+            tail -n 100 ffbuild/config.log
+            exit 1
+          fi
 
           make -j$(nproc)
 
@@ -97,7 +112,7 @@ jobs:
           7z a -tzip ../ffmpeg-win-x64.zip ffmpeg.exe ffprobe.exe
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ffmpeg-win-x64
           path: ffmpeg-win-x64.zip
